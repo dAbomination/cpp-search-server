@@ -27,6 +27,7 @@ int ReadLineWithNumber() {
     return result;
 }
 
+// Разделение строки на отдельные слова
 vector<string> SplitIntoWords(const string& text) {
     vector<string> words;
     string word;
@@ -49,9 +50,14 @@ vector<string> SplitIntoWords(const string& text) {
 }
 
 struct Document {
-    int id;
-    double relevance;
-    int rating;
+    Document() = default;
+
+    Document(int id, double relevance, int rating)
+        : id(id), relevance(relevance), rating(rating) { };
+
+    int id = 0;
+    double relevance = 0;
+    int rating = 0;
 };
 
 enum class DocumentStatus {
@@ -66,6 +72,19 @@ public:
     void SetStopWords(const string& text) {
         for (const string& word : SplitIntoWords(text)) {
             stop_words_.insert(word);
+        }
+    }
+
+    //Конструктор от аргумента string - строка со стоп словами    
+    explicit SearchServer(string stop_words = "") {
+        SetStopWords(stop_words);
+    }
+
+    //Шаблонный конкструктор для контейнеров set и вектор   
+    template<typename Container>
+    explicit SearchServer(Container input_stop_words) {
+        for (auto& stop_word : input_stop_words) {
+            SetStopWords(stop_word);
         }
     }
 
@@ -371,8 +390,52 @@ void RunTestImpl(TestFunc func, const string& func_name) {
 #define RUN_TEST(func) RunTestImpl((func), #func)
 
 //--------------------------------------------------------------
-// -------- Начало модульных тестов поисковой системы ----------
+//--------- Начало модульных тестов поисковой системы ----------
+// Тест функции SplitIntoWords при множественных пробелах
+void TestSplitIntoWordsWithMultiplySpaces() {
+    const vector<string> expected_result = { "first"s, "second"s, "third"s };
+    vector<string> result = SplitIntoWords("   first       second            third    "s);
+    ASSERT_EQUAL(result, expected_result);
+}
+// Тест поиска документов, имеющих заданный статус
+//В будущемо бъеденить с тестом ниже
+void TestAddingStopWordsByConstructor() {    
+    const int doc_id = 42;
+    const string content = "cat in the city"s;
+    const vector<int> ratings = { 1, 2, 3 };     
+    // Инициализируем поисковую систему, передавая стоп-слова в контейнере vector 
+    {           
+        const vector<string> stop_words_vector = { "in"s, "at"s, "and"s};
+        SearchServer server(stop_words_vector);
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        // Убеждаемся, что поиск слова, входящего в список стоп-слов,
+        // возвращает пустой результат
+        ASSERT(server.FindTopDocuments("in"s).empty());
+        ASSERT(server.FindTopDocuments("at"s).empty());
+    }
+    
+    // Инициализируем поисковую систему передавая стоп-слова в контейнере set
+    {
+        const set<string> stop_words_set = { "in"s, "at"s, "and"s };
+        SearchServer server(stop_words_set);
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        // Убеждаемся, что поиск слова, входящего в список стоп-слов,
+        // возвращает пустой результат
+        ASSERT(server.FindTopDocuments("in"s).empty());
+        ASSERT(server.FindTopDocuments("at"s).empty());
+    }    
 
+    // Инициализируем поисковую систему строкой со стоп-словами, разделёнными пробелами
+    {
+        const string stop_words = "     in       at      and      ";
+        SearchServer server(stop_words);
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+        // Убеждаемся, что поиск слова, входящего в список стоп-слов,
+        // возвращает пустой результат
+        ASSERT(server.FindTopDocuments("in"s).empty());
+        ASSERT(server.FindTopDocuments("at"s).empty());
+    }
+}
 // Тест проверяет, что поисковая система исключает стоп-слова при добавлении документов
 void TestExcludeStopWordsFromAddedDocumentContent() {
     const int doc_id = 42;
@@ -703,7 +766,11 @@ void TestRelevanceCalculating() {
 
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
+    RUN_TEST(TestSplitIntoWordsWithMultiplySpaces);
+    //Потом объеденить данные тесты
+    RUN_TEST(TestAddingStopWordsByConstructor);
     RUN_TEST(TestExcludeStopWordsFromAddedDocumentContent);
+
     RUN_TEST(TestExludeDocumentsWithMinusWordsFromResults);
     RUN_TEST(TestMatchDocuments);
     RUN_TEST(TestSortingByRelevance);
@@ -716,7 +783,29 @@ void TestSearchServer() {
 // --------- Окончание модульных тестов поисковой системы -----------
 
 int main() {
-    TestSearchServer();
+    TestSearchServer();   
     // Если вы видите эту строку, значит все тесты прошли успешно
-    cout << "Search server testing finished"s << endl;
+    cout << "Search server testing finished"s << endl << endl;
+
+    // Произвольные тесты
+    {
+        SearchServer search_server;
+        search_server.SetStopWords("и в на"s);
+        search_server.AddDocument(0, "белый кот и модный ошейник"s, DocumentStatus::ACTUAL, { 8, -3 });
+        search_server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+        search_server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, { 5, -12, 2, 1 });
+        search_server.AddDocument(3, "ухоженный скворец евгений"s, DocumentStatus::BANNED, { 9 });
+        cout << "ACTUAL by default:"s << endl;
+        for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s)) {
+            PrintDocument(document);
+        }
+        cout << "BANNED:"s << endl;
+        for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED)) {
+            PrintDocument(document);
+        }
+        cout << "Even ids:"s << endl;
+        for (const Document& document : search_server.FindTopDocuments("пушистый ухоженный кот"s, [](int document_id, DocumentStatus status, int rating) { return document_id % 2 == 0; })) {
+            PrintDocument(document);
+        }
+    }
 }
