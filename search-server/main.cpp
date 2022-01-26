@@ -1,4 +1,3 @@
-//#include "search_server.h"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -27,7 +26,7 @@ int ReadLineWithNumber() {
     return result;
 }
 
-// –азделение строки на отдельные слова
+// –азделение строки на отдельные слова разделЄнные пробелом
 vector<string> SplitIntoWords(const string& text) {
     vector<string> words;
     string word;
@@ -97,7 +96,8 @@ public:
         if ( (documents_.count(document_id)) || (document_id < 0) ) {
             return false; // error: this document_id already exist or below zero
         }
-        const vector<string> words = SplitIntoWordsNoStop(document);
+        vector<string> words;        
+        if (!SplitIntoWordsNoStop(document, words)) return false;// Ѕыли обнаружены неподход€щие слова
         const double inv_word_count = 1.0 / words.size();
         for (const string& word : words) {
             word_to_document_freqs_[word][document_id] += inv_word_count;
@@ -115,7 +115,8 @@ public:
         const string& raw_query,
         DocumentPredicate document_predicate,
         vector<Document>& result) const {
-        const Query query = ParseQuery(raw_query);
+        Query query;
+        if (!ParseQuery(raw_query, query)) return false;
 
         result = FindAllDocuments(query, document_predicate);
 
@@ -153,7 +154,8 @@ public:
         const string& raw_query,
         int document_id,
         tuple<vector<string>, DocumentStatus>& result) const { 
-        const Query query = ParseQuery(raw_query);
+        Query query;
+        if (!ParseQuery(raw_query, query)) return false;
         //  ортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
         // и статуса данного документа
         vector<string> matched_words;
@@ -179,10 +181,16 @@ public:
     }
 
     /* ѕозвол€ет получить id_document по его пор€дковому номеру.
-       ¬ случае, если пор€дковый номер документа выходит за пределы от [0; кол - во документов), 
+       ¬ случае, если пор€дковый номер документа выходит за пределы от [0; кол - во документов),
        метод должен вернуть значение SearchServer::INVALID_DOCUMENT_ID*/
     int GetDocumentId(int index) const {
-        
+        if ((index - 1) > documents_.size()) {// «апрашиваемый индекс больше количества документов
+            return SearchServer::INVALID_DOCUMENT_ID;
+        }
+        else {
+            auto It = next(documents_.begin(), index);
+            return It->first;;
+        }
     }
 
 private:
@@ -199,14 +207,14 @@ private:
         return stop_words_.count(word) > 0;
     }
 
-    vector<string> SplitIntoWordsNoStop(const string& text) const {
-        vector<string> words;
+    bool SplitIntoWordsNoStop(const string& text, vector<string>& result) const {        
         for (const string& word : SplitIntoWords(text)) {
+            if (!IsValidWord(word)) return false;
             if (!IsStopWord(word)) {
-                words.push_back(word);
+                result.push_back(word);
             }
         }
-        return words;
+        return true;
     }
 
     static int ComputeAverageRating(const vector<int>& ratings) {
@@ -245,10 +253,10 @@ private:
         set<string> minus_words;
     };
 
-    Query ParseQuery(const string& text) const {
-        Query query;
+    bool ParseQuery(const string& text, Query& query) const {        
         for (const string& word : SplitIntoWords(text)) {
             const QueryWord query_word = ParseQueryWord(word);
+            if (!IsValidWord(word)) return false;// ќбнаружены неподход€щие слова
             if (!query_word.is_stop) {
                 if (query_word.is_minus) {
                     query.minus_words.insert(query_word.data);
@@ -258,7 +266,7 @@ private:
                 }
             }
         }
-        return query;
+        return true;
     }
 
     // Existence required
@@ -312,6 +320,21 @@ private:
 
         }
         return matched_documents;
+    }
+
+    static bool IsValidWord(const string& word) {
+        //   слову предъ€вл€ютс€ следующие услови€:
+        // 1. не €вл€етс€ "одиноким" минусом;
+        // 2. не €вл€етс€ спецсимолом;
+        // 3. вначале слова нет больше 1 минуса (2 и больше);
+        if (!none_of(word.begin(), word.end(), [](char c) {
+            return c >= '\0' && c < ' ';
+            })) {
+            return false;
+        }
+        if (word == "-") return false;
+        if ((word.size() >= 2) && (word[0] == '-') && (word[1] == '-')) return false;
+        return true;
     }
 };
 
@@ -431,7 +454,7 @@ void TestSplitIntoWordsWithDifferentErrors() {
 void TestExcludeStopWordsFromAddedDocumentContent() {
     const int doc_id = 42;
     const string content = "cat in the city"s;
-    const vector<int> ratings = { 1, 2, 3 };
+    const vector<int> ratings = { 0 };
 
     // ѕопытаемс€ добавить документ с отрицательным id или с дублирующимс€ id
     {
@@ -619,7 +642,7 @@ void TestSortingByRelevance() {
         ASSERT(server.AddDocument(41, "one two three four five"s, DocumentStatus::ACTUAL, { 0 }));
         ASSERT(server.AddDocument(34, "two four"s, DocumentStatus::ACTUAL, { 0 }));
         ASSERT(server.AddDocument(62, "one two four five"s, DocumentStatus::ACTUAL, { 0 }));
-        ASSERT(server.AddDocument(7, "three four five"s, DocumentStatus::ACTUAL, { 0 }));
+        ASSERT(server.AddDocument(7, "three four five"s, DocumentStatus::ACTUAL, { 0 }));        
 
         ASSERT(server.FindTopDocuments(query, result));
         // ѕроверим что каждующа€ последующа€ релевантность меньше предыдущей         
