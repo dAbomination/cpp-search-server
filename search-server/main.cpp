@@ -60,6 +60,15 @@ struct Document {
     int rating = 0;
 };
 
+ostream& operator<<(ostream& out, const Document& document) {
+    cout << "{ "s
+        << "document_id = "s << document.id << ", "s
+        << "relevance = "s << document.relevance << ", "s
+        << "rating = "s << document.rating << " }"s;
+
+    return out;
+}
+
 enum class DocumentStatus {
     ACTUAL,
     IRRELEVANT,
@@ -67,15 +76,75 @@ enum class DocumentStatus {
     REMOVED,
 };
 
+// Один объект типа IteratorRange представляет собой одну страницу
+template <typename Iterator>
+class IteratorRange {
+public:
+    IteratorRange(Iterator begin, Iterator end)
+        : first_(begin),
+        last_(end),
+        page_size_(distance(first_, last_)) {
+    }
+
+    Iterator begin() const { return first_; }
+
+    Iterator end() const { return last_; }
+
+    size_t size() const { return page_size_; }       
+
+private:
+    Iterator first_;
+    Iterator last_;
+    size_t page_size_;
+};
+
+template <typename Iterator>
+ostream& operator<<(ostream& out, const IteratorRange<Iterator> page) {
+    for (auto it = page.begin(); it != page.end(); ++it) {
+        cout << *it;
+    }
+    return out;
+}
+
+// Класс для вывода результатов страницами
+template <typename Iterator>
+class Paginator {
+public:
+    // делать ли explicit
+    // Конструктор разделяет изначальный вектор типа Document на части
+    // каждая часть состоит из page_size кол-ва и представляет собой объект типа IteratorRange
+    Paginator(Iterator begin, Iterator end, size_t page_size) {
+        for (size_t left = distance(begin, end); left > 0;) {
+            const size_t current_page_size = min(page_size, left);
+            const Iterator current_page_end = next(begin, current_page_size);
+            pages_.push_back({ begin, current_page_end });
+
+            left -= current_page_size;
+            begin = current_page_end;
+        }
+    }
+
+    auto begin() const { return pages_.begin(); }
+
+    auto end() const { return pages_.end(); }
+
+    size_t size() const { return pages_.size(); }
+private:
+    vector<IteratorRange<Iterator>> pages_;    
+};
+
+template <typename Container>
+auto Paginate(const Container& c, size_t page_size) {
+    return Paginator(begin(c), end(c), page_size);    
+}
+
 class SearchServer {
 public:
-    // Defines an invalid document id    
-    inline static constexpr int INVALID_DOCUMENT_ID = -1;
 
     void SetStopWords(const string& text) {
-        for (const string& word : SplitIntoWords(text)) {
-            if (IsValidWord(word)) {
-                stop_words_.insert(word);
+        for (const string& stop_word : SplitIntoWords(text)) {
+            if (IsValidWord(stop_word)) {
+                stop_words_.insert(stop_word);
             }                
         }
     }
@@ -89,7 +158,9 @@ public:
     template<typename Container>
     explicit SearchServer(Container input_stop_words) {
         for (auto& stop_word : input_stop_words) {
-            SetStopWords(stop_word);
+            if (IsValidWord(stop_word)) {
+                stop_words_.insert(stop_word);
+            }
         }
     }
 
@@ -184,7 +255,7 @@ public:
 
     /* Позволяет получить id_document по его порядковому номеру.
        В случае, если порядковый номер документа выходит за пределы от [0; кол - во документов),
-       метод должен вернуть значение SearchServer::INVALID_DOCUMENT_ID*/
+       метод возвращает исключение*/
     int GetDocumentId(int index) const {        
         return document_ids_.at(index);
     }
@@ -856,26 +927,29 @@ void TestSearchServer() {
 //-----------Окончание модульных тестов поисковой системы------------
 
 int main() {
+    setlocale(LC_ALL, "Russian");
+
     TestSearchServer();   
     // Если вы видите эту строку, значит все тесты прошли успешно
     cout << "Search server testing finished"s << endl << endl;
     
-    //----------------Произвольные тесты-----------------------------   
-    setlocale(LC_ALL, "Russian");
-    SearchServer search_server("и в на"s);    
+    //----------------Произвольные тесты-----------------------------       
+    SearchServer search_server("and with"s);
 
-    AddDocument(search_server, 1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, {7, 2, 7});
-    AddDocument(search_server, 1, "пушистый пёс и модный ошейник"s, DocumentStatus::ACTUAL, { 1, 2 });
-    AddDocument(search_server, -1, "пушистый пёс и модный ошейник"s, DocumentStatus::ACTUAL, { 1, 2 });
-    AddDocument(search_server, 3, "большой пёс скво\x12рец евгений"s, DocumentStatus::ACTUAL, { 1, 3, 2 });
-    AddDocument(search_server, 4, "большой пёс скворец евгений"s, DocumentStatus::ACTUAL, { 1, 1, 1 });       
+    search_server.AddDocument(1, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    search_server.AddDocument(2, "funny pet with curly hair"s, DocumentStatus::ACTUAL, { 1, 2, 3 });
+    search_server.AddDocument(3, "big cat nasty hair"s, DocumentStatus::ACTUAL, { 1, 2, 8 });
+    search_server.AddDocument(4, "big dog cat Vladislav"s, DocumentStatus::ACTUAL, { 1, 3, 2 });
+    search_server.AddDocument(5, "big dog hamster Borya"s, DocumentStatus::ACTUAL, { 1, 1, 1 });
 
-    FindTopDocuments(search_server, "пушистый -пёс"s);
-    FindTopDocuments(search_server, "пушистый --кот"s);
-    FindTopDocuments(search_server, "пушистый -"s);
+    const auto search_results = search_server.FindTopDocuments("curly dog"s);
+    int page_size = 2;
+    
+    const auto pages = Paginate(search_results, page_size);      
 
-    MatchDocuments(search_server, "пушистый пёс"s);
-    MatchDocuments(search_server, "модный -кот"s);
-    MatchDocuments(search_server, "модный --пёс"s);
-    MatchDocuments(search_server, "пушистый - хвост"s);
+    // Выводим найденные документы по страницам
+    for (auto page = pages.begin(); page != pages.end(); ++page) {
+        cout << *page << endl;
+        cout << "Page break"s << endl;
+    }
 }
