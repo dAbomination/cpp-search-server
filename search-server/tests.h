@@ -5,10 +5,10 @@
 #include <set>
 #include <map>
 
-#include "search-server.h"
+#include "search_server.h"
 
+// Потом убрать это
 using namespace std;
-
 //-----------------------------------------
 // Макросы для тестирования
 //-----------------------------------------

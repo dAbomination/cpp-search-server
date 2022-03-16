@@ -1,5 +1,7 @@
 #include "string_processing.h"
 
+using namespace std;
+
 vector<string> SplitIntoWords(const string& text) {
     vector<string> words;
     string word;

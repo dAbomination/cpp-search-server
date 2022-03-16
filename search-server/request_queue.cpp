@@ -1,17 +1,23 @@
 #include "request_queue.h"
 
-vector<Document> RequestQueue::AddFindRequest(const string& raw_query, DocumentStatus status) {
-    vector<Document> result = search_server_.FindTopDocuments(raw_query, status);
-    adding_result(result.size());
+using namespace std;
 
-    return result;
+vector<Document> RequestQueue::AddFindRequest(const string& raw_query, DocumentStatus status) {    
+    return AddFindRequest(
+        raw_query,
+        [status](int document_id, DocumentStatus document_status, int rating) {
+            return document_status == status;
+        }
+    );    
 }
 
 vector<Document> RequestQueue::AddFindRequest(const string& raw_query) {
-    vector<Document> result = search_server_.FindTopDocuments(raw_query);
-    adding_result(result.size());
-
-    return result;
+    return AddFindRequest(
+        raw_query,
+        [](int document_id, DocumentStatus status, int rating) {
+            return status == DocumentStatus::ACTUAL;
+        }
+    );
 }
 
 // Возвращает кол-во пустых запросов за сутки
@@ -21,8 +27,8 @@ int RequestQueue::GetNoResultRequests() const {
 
 // Функция добавляет в очередь результат запроса и время добавления
 // и производит необходимые операции со временем
-void RequestQueue::adding_result(int results_num) {
-    // один запрос в одну минуту
+void RequestQueue::AddinResult(int results_num) {
+    // Один запрос в одну минуту
     ++time_;
     // Если результат поиска пустой увеличиваем значение пустых запросов
     if (results_num == 0) {

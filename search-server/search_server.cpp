@@ -1,5 +1,7 @@
 #include "search_server.h"
 
+using namespace std;
+
 void SearchServer::SetStopWords(const string& text) {
     for (const string& stop_word : SplitIntoWords(text)) {
         if (IsValidWord(stop_word)) {
@@ -32,10 +34,7 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     document_ids_.push_back(document_id);
 }
 
-int SearchServer::GetDocumentCount() const {
-    return documents_.size();
-}
-
+// Find documents with certain status
 vector<Document> SearchServer::FindTopDocuments(const string& raw_query, DocumentStatus status) const {
     return FindTopDocuments(
         raw_query,
@@ -45,6 +44,7 @@ vector<Document> SearchServer::FindTopDocuments(const string& raw_query, Documen
     );
 }
 
+// Find documents with status = ACTUAL
 vector<Document> SearchServer::FindTopDocuments(const string& raw_query) const {
     return FindTopDocuments(
         raw_query,
@@ -52,6 +52,10 @@ vector<Document> SearchServer::FindTopDocuments(const string& raw_query) const {
             return status == DocumentStatus::ACTUAL;
         }
     );
+}
+
+int SearchServer::GetDocumentCount() const {
+    return documents_.size();
 }
 
 tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
@@ -200,6 +204,7 @@ void AddDocument(SearchServer& search_server, int document_id, const string& doc
 }
 
 void FindTopDocuments(const SearchServer& search_server, const string& raw_query) {
+    LOG_DURATION_STREAM("Operation time", cout);
     cout << "Результаты поиска по запросу: "s << raw_query << endl;
     try {
         for (const Document& document : search_server.FindTopDocuments(raw_query)) {
@@ -212,6 +217,7 @@ void FindTopDocuments(const SearchServer& search_server, const string& raw_query
 }
 
 void MatchDocuments(const SearchServer& search_server, const string& query) {
+    LOG_DURATION_STREAM("Operation time", cout);
     try {
         cout << "Матчинг документов по запросу: "s << query << endl;
         const int document_count = search_server.GetDocumentCount();
