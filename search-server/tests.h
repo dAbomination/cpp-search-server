@@ -7,7 +7,7 @@
 
 #include "search_server.h"
 
-// Потом убрать это
+// Потом убрать это и переделать на 2 файла
 using namespace std;
 //-----------------------------------------
 // Макросы для тестирования
@@ -467,10 +467,37 @@ void TestRelevanceCalculating() {
     }
 }
 
+// Проверяем корректность удаления документа
+void TestDeletetingDocument() {
+    SearchServer search_server("and with"s);
+
+    AddDocument(search_server, 1, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    AddDocument(search_server, 2, "funny pet with curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });    
+    AddDocument(search_server, 3, "funny pet with curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+    AddDocument(search_server, 4, "funny pet and curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+    AddDocument(search_server, 5, "funny funny pet and nasty nasty rat"s, DocumentStatus::ACTUAL, { 1, 2 });
+    AddDocument(search_server, 6, "funny pet and not very nasty rat"s, DocumentStatus::ACTUAL, { 1, 2 });
+    AddDocument(search_server, 7, "very nasty rat and not very funny pet"s, DocumentStatus::ACTUAL, { 1, 2 });
+    AddDocument(search_server, 8, "pet with rat and rat and rat"s, DocumentStatus::ACTUAL, { 1, 2 });
+    AddDocument(search_server, 9, "nasty rat with curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+
+    int doc_count = search_server.GetDocumentCount();
+    ASSERT_EQUAL(doc_count, 9); // Кол-во документов должно быть равно 9
+
+    //удаляем документ с id 5
+    search_server.RemoveDocument(5);
+
+    doc_count = search_server.GetDocumentCount();
+    ASSERT_EQUAL(doc_count, 8); // Кол-во документов должно быть равно 8
+
+    //Проверям что по зпросу с id=5 не находится ничего
+    auto result = search_server.GetWordFrequencies(5);
+    ASSERT(result.empty());
+}
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
     RUN_TEST(TestSplitIntoWordsWithDifferentErrors);
-
     RUN_TEST(TestAddingDocumentsStopWordsExcludingStopWords);
     RUN_TEST(TestExludeDocumentsWithMinusWordsFromResults);
     RUN_TEST(TestMatchDocuments);
@@ -479,6 +506,7 @@ void TestSearchServer() {
     RUN_TEST(TestFilterWithPredicate);
     RUN_TEST(TestSearchByStatus);
     RUN_TEST(TestRelevanceCalculating);
-}
+    RUN_TEST(TestDeletetingDocument);
 
+}
 //-----------Окончание модульных тестов поисковой системы------------

@@ -30,7 +30,7 @@ public:
     }
 
 private:
-    std::ostream& output_stream = std::cerr;
     const std::string id_;
+    std::ostream& output_stream = std::cerr;
     const Clock::time_point start_time_ = Clock::now();
 };

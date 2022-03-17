@@ -30,19 +30,30 @@ public:
     // Adding new document to search server
     void AddDocument(int document_id, const std::string& document, DocumentStatus status, const std::vector<int>& ratings);
 
+    // Удаление документа с заданным id
+    void RemoveDocument(int document_id);
+    
+    // Поиск MAX_RESULT_DOCUMENT_COUNT документов
     template <typename DocumentPredicate>
     std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentPredicate document_predicate) const;
     std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentStatus status) const;
-    std::vector<Document> FindTopDocuments(const std::string& raw_query) const;
-
-    int GetDocumentCount() const;
-
+    std::vector<Document> FindTopDocuments(const std::string& raw_query) const;       
+        
     std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
+
+    // Получение слов и их частоты по Id документа
+    const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
 
     /* Позволяет получить id_document по его порядковому номеру.
        В случае, если порядковый номер документа выходит за пределы от [0; кол - во документов),
        метод возвращает исключение*/
-    int GetDocumentId(int index) const;
+    //int GetDocumentId(int index) const;
+
+    int GetDocumentCount() const;
+
+    std::set<int>::const_iterator begin() const;
+
+    std::set<int>::const_iterator end() const;   
 
 private:
     struct DocumentData {
@@ -61,10 +72,12 @@ private:
         bool is_stop;
     };
 
-    std::set<std::string> stop_words_;
-    std::map<std::string, std::map<int, double>> word_to_document_freqs_;
-    std::map<int, DocumentData> documents_;
-    std::vector<int> document_ids_;// Идентификаторы документов в порядке добавления    
+    std::set<std::string> stop_words_;    
+    std::map<int, DocumentData> documents_; // [document_id, DocumentData]
+    std::set<int> document_ids_;// Идентификаторы документов в порядке добавления    
+
+    std::map<std::string, std::map<int, double>> word_to_document_freqs_; // [word, [document_id, word_freq]]
+    std::map<int, std::map<std::string, double>> document_to_word_freqs_; // [document_id, [word, word_freq]]
 
     std::vector<std::string> SplitIntoWordsNoStop(const std::string& text) const;
 

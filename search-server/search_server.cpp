@@ -25,13 +25,32 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     const double inv_word_count = 1.0 / words.size();
     for (const string& word : words) {
         word_to_document_freqs_[word][document_id] += inv_word_count;
+        document_to_word_freqs_[document_id][word] += inv_word_count;
     }
+
     documents_.emplace(document_id,
         DocumentData{
             ComputeAverageRating(ratings),
             status
         });
-    document_ids_.push_back(document_id);
+
+    document_ids_.insert(document_id);
+}
+
+void SearchServer::RemoveDocument(int document_id) {
+    // Зная количество слов в документе удаляем из следующих контейнеров данные об этом документе
+    // word_to_document_freqs_
+    for (auto [word, freq] : document_to_word_freqs_[document_id]) {        
+        word_to_document_freqs_[word].erase(document_id);
+    }
+    // document_to_word_freqs_
+    document_to_word_freqs_.erase(document_id);
+
+    // document_ids_
+    document_ids_.erase(document_id);
+
+    // documents_
+    documents_.erase(document_id);
 }
 
 // Find documents with certain status
@@ -54,8 +73,26 @@ vector<Document> SearchServer::FindTopDocuments(const string& raw_query) const {
     );
 }
 
+// Получение слов и их частоты по Id документа
+const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    static map<string, double> result;
+
+    auto find_result = document_to_word_freqs_.find(document_id);
+    if (find_result != document_to_word_freqs_.end()) result = find_result->second;
+
+    return result;
+}
+
 int SearchServer::GetDocumentCount() const {
     return documents_.size();
+}
+
+std::set<int>::const_iterator SearchServer::begin() const {
+    return document_ids_.begin();
+}
+
+std::set<int>::const_iterator SearchServer::end() const {
+    return document_ids_.end();
 }
 
 tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
@@ -87,9 +124,9 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
 /* Позволяет получить id_document по его порядковому номеру.
    В случае, если порядковый номер документа выходит за пределы от [0; кол - во документов),
    метод возвращает исключение*/
-int SearchServer::GetDocumentId(int index) const {
+/*int SearchServer::GetDocumentId(int index) const {
     return document_ids_.at(index);
-}
+}*/
 
 // Приватные методы
 
@@ -219,13 +256,13 @@ void FindTopDocuments(const SearchServer& search_server, const string& raw_query
 void MatchDocuments(const SearchServer& search_server, const string& query) {
     LOG_DURATION_STREAM("Operation time", cout);
     try {
-        cout << "Матчинг документов по запросу: "s << query << endl;
-        const int document_count = search_server.GetDocumentCount();
-        for (int index = 0; index < document_count; ++index) {
-            const int document_id = search_server.GetDocumentId(index);
+        cout << "Матчинг документов по запросу: "s << query << endl;        
+        
+        for (const int document_id : search_server) {
             const auto [words, status] = search_server.MatchDocument(query, document_id);
             PrintMatchDocumentResult(document_id, words, status);
         }
+
     }
     catch (const exception& e) {
         cout << "Ошибка матчинга документов на запрос "s << query << ": "s << e.what() << endl;
