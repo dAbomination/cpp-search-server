@@ -4,7 +4,7 @@ using namespace std;
 
 void SearchServer::SetStopWords(const string& text) {
     for (const string& stop_word : SplitIntoWords(text)) {
-        if (IsValidWord(stop_word)) {
+        if (NoSpecSymbols(stop_word)) {
             stop_words_.insert(stop_word);
         }
     }
@@ -78,7 +78,9 @@ const map<string, double>& SearchServer::GetWordFrequencies(int document_id) con
     static map<string, double> result;
 
     auto find_result = document_to_word_freqs_.find(document_id);
-    if (find_result != document_to_word_freqs_.end()) result = find_result->second;
+    if (find_result != document_to_word_freqs_.end()) {
+        return find_result->second;
+    }
 
     return result;
 }
@@ -118,7 +120,7 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
         }
     }
 
-    return tuple{ matched_words, documents_.at(document_id).status };// Succesfull
+    return { matched_words, documents_.at(document_id).status };// Succesfull
 }
 
 /* Позволяет получить id_document по его порядковому номеру.
@@ -137,7 +139,7 @@ bool SearchServer::IsStopWord(const string& word) const {
 vector<string> SearchServer::SplitIntoWordsNoStop(const string& text) const {
     vector<string> result;
     for (const string& word : SplitIntoWords(text)) {
-        if (IsValidWord(word)) {
+        if (NoSpecSymbols(word)) {
             if (!IsStopWord(word)) {
                 result.push_back(word);
             }
@@ -175,7 +177,7 @@ SearchServer::Query SearchServer::ParseQuery(const string& text) const {
     Query query;
     for (const string& word : SplitIntoWords(text)) {
         const QueryWord query_word = ParseQueryWord(word);
-        if (IsValidWord(word)) {// Проверка все ли слова подходящие
+        if (NoSpecSymbols(word) && NoWrongMinuses(word)) {// Проверка все ли слова подходящие
             if (!query_word.is_stop) {
                 if (query_word.is_minus) {
                     query.minus_words.insert(query_word.data);
@@ -194,17 +196,20 @@ double SearchServer::ComputeWordInverseDocumentFreq(const string& word) const {
     return log(GetDocumentCount() * 1.0 / word_to_document_freqs_.at(word).size());
 }
 
-// Проверка валидности отдельного слова
-bool SearchServer::IsValidWord(const string& word) {
-    // К слову предъявляются следующие условия:
-    // 1. не является "одиноким" минусом;
-    // 2. не является спецсимолом;
-    // 3. вначале слова нет больше 1 минуса (2 и больше);
+// Проверка отдельного слова на наличие спецсимволов
+bool SearchServer::NoSpecSymbols(const string& word) {    
     if (!none_of(word.begin(), word.end(), [](char c) {
         return c >= '\0' && c < ' ';
         })) {
         throw invalid_argument("contains invalid characters");
-    }
+    }    
+    return true;
+}
+
+// Проверка отдельного слова на :
+// - то что слово не является "одиноким" минусом
+// - то что перед словом не идут подряд несколько минусов
+bool SearchServer::NoWrongMinuses(const string& word) {
     if (word == "-") throw invalid_argument("lonely minus");
     if ((word.size() >= 2) && (word[0] == '-') && (word[1] == '-')) throw invalid_argument("too many minuses");
     return true;

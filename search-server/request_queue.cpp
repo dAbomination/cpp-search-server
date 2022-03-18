@@ -12,12 +12,7 @@ vector<Document> RequestQueue::AddFindRequest(const string& raw_query, DocumentS
 }
 
 vector<Document> RequestQueue::AddFindRequest(const string& raw_query) {
-    return AddFindRequest(
-        raw_query,
-        [](int document_id, DocumentStatus status, int rating) {
-            return status == DocumentStatus::ACTUAL;
-        }
-    );
+    return AddFindRequest(raw_query, DocumentStatus::ACTUAL);    
 }
 
 // ¬озвращает кол-во пустых запросов за сутки

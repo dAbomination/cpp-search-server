@@ -92,7 +92,9 @@ private:
     std::vector<Document> FindAllDocuments(const SearchServer::Query& query, DocumentPredicate document_predicate) const;
 
     // Проверка валидности отдельного слова
-    static bool IsValidWord(const std::string& word);
+    static bool NoWrongMinuses(const std::string& word);
+    static bool NoSpecSymbols(const std::string& word);
+
     bool IsStopWord(const std::string& word) const;
 };
 //------------------Конец класса SearchServer-----------------------
