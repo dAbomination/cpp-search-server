@@ -1,13 +1,12 @@
 #pragma once
 #include "search_server.h"
+#include "log_duration.h"
 
 #include <iostream>
 #include <random>
 #include <string>
 #include <vector>
-
-#include "log_duration.h"
-#include "tests.h"
+#include <execution>
 
 using namespace std;
 
@@ -16,7 +15,7 @@ string GenerateWord(mt19937& generator, int max_length) {
     string word;
     word.reserve(length);
     for (int i = 0; i < length; ++i) {
-        word.push_back(uniform_int_distribution('a', 'z')(generator));
+        word.push_back(uniform_int_distribution((short)'a', (short)'z')(generator));
     }
     return word;
 }
@@ -53,24 +52,69 @@ vector<string> GenerateQueries(mt19937& generator, const vector<string>& diction
     return queries;
 }
 
-template <typename QueriesProcessor>
-void Test(string_view mark, QueriesProcessor processor, const SearchServer& search_server, const vector<string>& queries) {
+template <typename ExecutionPolicy>
+void TestRemoveDocumentsBigSize(string_view mark, SearchServer search_server, ExecutionPolicy&& policy) {
     LOG_DURATION(mark);
-    const auto documents_lists = processor(search_server, queries);
+    const int document_count = search_server.GetDocumentCount();
+    for (int id = 0; id < document_count; ++id) {
+        search_server.RemoveDocument(policy, id);
+    }
+    cout << search_server.GetDocumentCount() << endl;
 }
 
-#define TEST(processor) Test(#processor, processor, search_server, queries)
+#define TEST_REMOVING(mode) TestRemoveDocumentsBigSize(#mode, search_server, execution::mode)
 
-int Test() {
+void TestRemovingDocumentsWithPolicy() {
     mt19937 generator;
-    const auto dictionary = GenerateDictionary(generator, 2'000, 25);
-    const auto documents = GenerateQueries(generator, dictionary, 20'000, 10);
+    
+    const auto dictionary = GenerateDictionary(generator, 10'000, 25);
+    const auto documents = GenerateQueries(generator, dictionary, 10'000, 100);
+
+    {
+        SearchServer search_server(dictionary[0]);
+        for (size_t i = 0; i < documents.size(); ++i) {
+            search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
+        }
+
+        TEST_REMOVING(seq);
+    }
+    {
+        SearchServer search_server(dictionary[0]);
+        for (size_t i = 0; i < documents.size(); ++i) {
+            search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
+        }
+
+        TEST_REMOVING(par);
+    }
+}
+
+template <typename ExecutionPolicy>
+void TestMathcingDocumentsBigSize(string_view mark, SearchServer search_server, const string& query, ExecutionPolicy&& policy) {
+    LOG_DURATION(mark);
+    const int document_count = search_server.GetDocumentCount();
+    int word_count = 0;
+    for (int id = 0; id < document_count; ++id) {
+        const auto [words, status] = search_server.MatchDocument(policy, query, id);
+        word_count += words.size();
+    }
+    cout << word_count << endl;
+}
+
+#define TEST_MATCHING(policy) TestMathcingDocumentsBigSize(#policy, search_server, query, execution::policy)
+
+void TestMatchingDocumentsWithPolicy() {
+    mt19937 generator;
+
+    const auto dictionary = GenerateDictionary(generator, 1000, 10);
+    const auto documents = GenerateQueries(generator, dictionary, 10'000, 70);
+
+    const string query = GenerateQuery(generator, dictionary, 500, 0.1);
 
     SearchServer search_server(dictionary[0]);
     for (size_t i = 0; i < documents.size(); ++i) {
         search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
     }
 
-    const auto queries = GenerateQueries(generator, dictionary, 2'000, 7);
-    TEST(ProcessQueries);
+    TEST_MATCHING(seq);
+    TEST_MATCHING(par);
 }

@@ -14,7 +14,7 @@ void SearchServer::SetStopWords(const string& text) {
 SearchServer::SearchServer(string stop_words) {
     SetStopWords(stop_words);
 }
-
+ 
 // Adding new document to search server
 void SearchServer::AddDocument(int document_id, const string& document, DocumentStatus status, const vector<int>& ratings) {
     // Check if document with document_id already exist or document_id < 0
@@ -23,28 +23,86 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     }
     vector<string> words = SplitIntoWordsNoStop(document);
     const double inv_word_count = 1.0 / words.size();
+
+    map<string, double> word_freqs_in_doc;
     for (const string& word : words) {
-        word_to_document_freqs_[word][document_id] += inv_word_count;
-        document_to_word_freqs_[document_id][word] += inv_word_count;
+        word_to_document_freqs_[word][document_id] += inv_word_count;        
+        word_freqs_in_doc[word] += inv_word_count;
     }
 
     documents_.emplace(document_id,
         DocumentData{
             ComputeAverageRating(ratings),
-            status
+            status,
+            word_freqs_in_doc
         });
 
     document_ids_.insert(document_id);
 }
 
+// ќднопоточна€ верси€ удалени€ документа
 void SearchServer::RemoveDocument(int document_id) {
+    RemoveDocument(execution::seq, document_id);
+}
+
+// ќднопоточна€ верси€ удалени€ документа
+void SearchServer::RemoveDocument(std::execution::sequenced_policy policy, int document_id) {
     // «на€ количество слов в документе удал€ем из следующих контейнеров данные об этом документе
     // word_to_document_freqs_
-    for (auto [word, freq] : document_to_word_freqs_[document_id]) {        
-        word_to_document_freqs_[word].erase(document_id);
-    }
-    // document_to_word_freqs_
-    document_to_word_freqs_.erase(document_id);
+    for_each(
+        policy,
+        documents_[document_id].word_freqs_.begin(),
+        documents_[document_id].word_freqs_.end(),
+        [this, document_id](const pair<string, double>& word) { // first - word, second - word's freq
+            word_to_document_freqs_[word.first].erase(document_id);
+        }
+    );
+
+    // document_ids_
+    document_ids_.erase(document_id);
+
+    // documents_
+    documents_.erase(document_id);
+}
+
+// ћногопоточна€ верси€ удалени€ документа
+void SearchServer::RemoveDocument(std::execution::parallel_policy policy, int document_id) {    
+
+    // «на€ количество слов в документе удал€ем из следующих контейнеров данные об этом документе
+    // word_to_document_freqs_       
+    map<string, double>& words_in_doc = documents_.at(document_id).word_freqs_;
+    vector<const string*> words_to_erase(words_in_doc.size());
+
+    transform(
+        policy,
+        words_in_doc.begin(),
+        words_in_doc.end(),
+        words_to_erase.begin(),
+        [](const auto& word) {
+            return &word.first;
+        }
+    );
+    
+    for_each(
+        policy,
+        words_to_erase.begin(),
+        words_to_erase.end(),
+        [&, document_id](const auto& word) {
+            word_to_document_freqs_[*word].erase(document_id);
+        }
+    );
+
+    // Ќедостаточно скорости выполнени€
+    //vector<pair<string, double>> words_to_remove(documents_[document_id].word_freqs_.begin(), documents_[document_id].word_freqs_.end());
+
+    //for_each(
+    //    policy,
+    //    words_to_remove.begin(),
+    //    words_to_remove.end(),
+    //    [&, document_id](const pair<string, double>& word) { // first - word, second - word's freq
+    //        word_to_document_freqs_[word.first].erase(document_id);
+    //    }
+    //);
 
     // document_ids_
     document_ids_.erase(document_id);
@@ -77,9 +135,9 @@ vector<Document> SearchServer::FindTopDocuments(const string& raw_query) const {
 const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
     static map<string, double> result;
 
-    auto find_result = document_to_word_freqs_.find(document_id);
-    if (find_result != document_to_word_freqs_.end()) {
-        return find_result->second;
+    auto find_freq_result = documents_.find(document_id);
+    if (find_freq_result != documents_.end()) {
+        return find_freq_result->second.word_freqs_;
     }
 
     return result;
@@ -121,6 +179,38 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
     }
 
     return { matched_words, documents_.at(document_id).status };// Succesfull
+}
+
+// ћногопоточна€ верси€ функции
+tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string& raw_query, int document_id) const {
+    // ѕровер€ем что данный документ существует по document_id
+    /*if () {
+        throw std::out_of_range("No document with this id");
+    }*/
+
+    const Query query = ParseQuery(raw_query);
+    //  ортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
+    // и статуса данного документа
+    vector<string> matched_words;
+    for (const string& word : query.plus_words) {
+        if (word_to_document_freqs_.count(word) == 0) {
+            continue;
+        }
+        if (word_to_document_freqs_.at(word).count(document_id)) {
+            matched_words.push_back(word);
+        }
+    }
+    for (const string& word : query.minus_words) {
+        if (word_to_document_freqs_.count(word) == 0) {
+            continue;
+        }
+        if (word_to_document_freqs_.at(word).count(document_id)) {
+            matched_words.clear();
+            break;
+        }
+    }
+
+    return { matched_words, documents_.at(document_id).status }; // Succesfull
 }
 
 /* ѕозвол€ет получить id_document по его пор€дковому номеру.

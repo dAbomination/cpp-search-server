@@ -37,5 +37,13 @@ std::vector<Document> ProcessQueriesJoined(
         it_to_paste = copy(execution::par, single_query_result.begin(), single_query_result.end(), it_to_paste);
     }
 
+    // ѕоследовательный перебор всех векторов в векторе ProcessQueries_result и добавление в результирующий вектор
+    /*vector<Document> result;
+    for (vector<Document> vec : ProcessQueries_result) {
+        for (Document doc : vec) {
+            result.push_back(doc);
+        }
+    }*/
+
     return result;
 }

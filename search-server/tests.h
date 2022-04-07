@@ -7,6 +7,7 @@
 
 #include "search_server.h"
 #include "process_queries.h"
+#include "temp.h"
 
 // Потом убрать это и переделать на 2 файла
 using namespace std;
@@ -553,6 +554,33 @@ void TestParallelSearchQueries() {
     ASSERT_EQUAL(result[2].size(), 2);
 }
 
+// Тест проверят работу функции ProcessQueriesJoined
+void TestParallelSearchQueriesJoined() {
+    SearchServer search_server("and with"s);
+
+    int id = 0;
+    for (
+        const string& text : {
+            "funny pet and nasty rat"s,
+            "funny pet with curly hair"s,
+            "funny pet and not very nasty rat"s,
+            "pet with rat and rat and rat"s,
+            "nasty rat with curly hair"s,
+        }
+        ) {
+        search_server.AddDocument(++id, text, DocumentStatus::ACTUAL, { 1, 2 });
+    }
+
+    const vector<string> queries = {
+        "nasty rat -not"s,
+        "not very funny nasty pet"s,
+        "curly hair"s
+    };
+    for (const Document& document : ProcessQueriesJoined(search_server, queries)) {
+        cout << "Document "s << document.id << " matched with relevance "s << document.relevance << endl;
+    }
+}
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
     RUN_TEST(TestSplitIntoWordsWithDifferentErrors);
@@ -567,5 +595,9 @@ void TestSearchServer() {
     RUN_TEST(TestDeletetingDocument);
     RUN_TEST(TestDeleteDuplicates);
     RUN_TEST(TestParallelSearchQueries);
+    RUN_TEST(TestParallelSearchQueriesJoined);
+
+    RUN_TEST(TestRemovingDocumentsWithPolicy);
+    RUN_TEST(TestMatchingDocumentsWithPolicy);
 }
 //-----------Окончание модульных тестов поисковой системы------------

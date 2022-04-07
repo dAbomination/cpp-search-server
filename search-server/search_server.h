@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <deque>
+#include <execution>
 
 #include "string_processing.h"
 #include "document.h"
@@ -31,8 +32,10 @@ public:
     void AddDocument(int document_id, const std::string& document, DocumentStatus status, const std::vector<int>& ratings);
 
     // Удаление документа с заданным id
-    void RemoveDocument(int document_id);
-    
+    void RemoveDocument(int document_id);    
+    void RemoveDocument(std::execution::sequenced_policy policy, int document_id);
+    void RemoveDocument(std::execution::parallel_policy policy, int document_id);
+
     // Поиск MAX_RESULT_DOCUMENT_COUNT документов
     template <typename DocumentPredicate>
     std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentPredicate document_predicate) const;
@@ -40,6 +43,8 @@ public:
     std::vector<Document> FindTopDocuments(const std::string& raw_query) const;       
         
     std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(std::execution::parallel_policy policy, const std::string& raw_query, int document_id) const;
+
 
     // Получение слов и их частоты по Id документа
     const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
@@ -59,6 +64,7 @@ private:
     struct DocumentData {
         int rating;
         DocumentStatus status;
+        std::map<std::string, double> word_freqs_; // [word, word_freq] in document
     };
 
     struct Query {
@@ -76,8 +82,7 @@ private:
     std::map<int, DocumentData> documents_; // [document_id, DocumentData]
     std::set<int> document_ids_;// Идентификаторы документов в порядке добавления    
 
-    std::map<std::string, std::map<int, double>> word_to_document_freqs_; // [word, [document_id, word_freq]]
-    std::map<int, std::map<std::string, double>> document_to_word_freqs_; // [document_id, [word, word_freq]]
+    std::map<std::string, std::map<int, double>> word_to_document_freqs_; // [word, [document_id, word_freq]]    
 
     std::vector<std::string> SplitIntoWordsNoStop(const std::string& text) const;
 
@@ -166,6 +171,7 @@ std::vector<Document> SearchServer::FindAllDocuments(const SearchServer::Query& 
     }
     return matched_documents;
 }
+
 //---------------------------------------------------------------------
 //--------------Внешние функции для работы с SearchServer--------------
 void PrintDocument(const Document& document);
