@@ -6,6 +6,7 @@
 #include <map>
 
 #include "search_server.h"
+#include "process_queries.h"
 
 // Потом убрать это и переделать на 2 файла
 using namespace std;
@@ -495,6 +496,63 @@ void TestDeletetingDocument() {
     ASSERT(result.empty());
 }
 
+// Тест проверяет работу удаления дубликатов документов
+// дубликатом считается документ с одинаковым набором слов, неважно в каком кол-ве данные слова
+void TestDeleteDuplicates() {
+    SearchServer search_server("and with"s);
+
+    AddDocument(search_server, 1, "funny pet and nasty rat"s, DocumentStatus::ACTUAL, { 7, 2, 7 });
+    AddDocument(search_server, 2, "funny pet with curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // дубликат документа 2, будет удалён
+    AddDocument(search_server, 3, "funny pet with curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // отличие только в стоп-словах, считаем дубликатом
+    AddDocument(search_server, 4, "funny pet and curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // множество слов такое же, считаем дубликатом документа 1
+    AddDocument(search_server, 5, "funny funny pet and nasty nasty rat"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // добавились новые слова, дубликатом не является
+    AddDocument(search_server, 6, "funny pet and not very nasty rat"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // множество слов такое же, как в id 6, несмотря на другой порядок, считаем дубликатом
+    AddDocument(search_server, 7, "very nasty rat and not very funny pet"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // есть не все слова, не является дубликатом
+    AddDocument(search_server, 8, "pet with rat and rat and rat"s, DocumentStatus::ACTUAL, { 1, 2 });
+    // слова из разных документов, не является дубликатом
+    AddDocument(search_server, 9, "nasty rat with curly hair"s, DocumentStatus::ACTUAL, { 1, 2 });
+
+    // До удаления дубликатов кол-во документов 9
+    ASSERT_EQUAL(search_server.GetDocumentCount(), 9);
+    RemoveDuplicates(search_server);
+    // После удаления дубликатов должно остаться 5 документов
+    ASSERT_EQUAL(search_server.GetDocumentCount(), 5);
+}
+
+// Тест проверят работу функции ProcessQueries
+void TestParallelSearchQueries() {
+    SearchServer search_server("and with"s);
+    int id = 0;
+    for (
+        const string& text : {
+            "funny pet and nasty rat"s,
+            "funny pet with curly hair"s,
+            "funny pet and not very nasty rat"s,
+            "pet with rat and rat and rat"s,
+            "nasty rat with curly hair"s,
+        }
+        ) {
+        search_server.AddDocument(++id, text, DocumentStatus::ACTUAL, { 1, 2 });
+    }
+
+    const vector<string> queries = {
+        "nasty rat -not"s, // Для данного запроса найдётся 3 документ
+        "not very funny nasty pet"s, // 5 документов
+        "curly hair"s // 2 документа
+    };
+    auto result = ProcessQueries(search_server, queries);
+
+    ASSERT_EQUAL(result[0].size(), 3);
+    ASSERT_EQUAL(result[1].size(), 5);
+    ASSERT_EQUAL(result[2].size(), 2);
+}
+
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
     RUN_TEST(TestSplitIntoWordsWithDifferentErrors);
@@ -507,6 +565,7 @@ void TestSearchServer() {
     RUN_TEST(TestSearchByStatus);
     RUN_TEST(TestRelevanceCalculating);
     RUN_TEST(TestDeletetingDocument);
-
+    RUN_TEST(TestDeleteDuplicates);
+    RUN_TEST(TestParallelSearchQueries);
 }
 //-----------Окончание модульных тестов поисковой системы------------

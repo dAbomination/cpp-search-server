@@ -91,8 +91,10 @@ private:
     template <typename DocumentPredicate>
     std::vector<Document> FindAllDocuments(const SearchServer::Query& query, DocumentPredicate document_predicate) const;
 
-    // ѕроверка валидности отдельного слова
+    // ѕроверка валидности отдельного слова на:
+    // отсутствие более чем одного минуса перед словами
     static bool NoWrongMinuses(const std::string& word);
+    // наличие недопустимых символов (с кодами от 0 до 31)
     static bool NoSpecSymbols(const std::string& word);
 
     bool IsStopWord(const std::string& word) const;
@@ -104,7 +106,7 @@ private:
 template<typename Container>
 SearchServer::SearchServer(Container input_stop_words) {
     for (auto& stop_word : input_stop_words) {
-        if (IsValidWord(stop_word)) {
+        if (NoSpecSymbols(stop_word)) {
             stop_words_.insert(stop_word);
         }
     }
