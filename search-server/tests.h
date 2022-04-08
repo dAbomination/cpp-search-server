@@ -7,7 +7,9 @@
 
 #include "search_server.h"
 #include "process_queries.h"
-#include "temp.h"
+
+#include "match_documents_test.h"
+//#include "remove_documents_test.h"
 
 // Потом убрать это и переделать на 2 файла
 using namespace std;
@@ -597,7 +599,7 @@ void TestSearchServer() {
     RUN_TEST(TestParallelSearchQueries);
     RUN_TEST(TestParallelSearchQueriesJoined);
 
-    RUN_TEST(TestRemovingDocumentsWithPolicy);
+    //RUN_TEST(TestRemovingDocumentsWithPolicy);
     RUN_TEST(TestMatchingDocumentsWithPolicy);
 }
 //-----------Окончание модульных тестов поисковой системы------------

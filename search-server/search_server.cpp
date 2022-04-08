@@ -155,7 +155,18 @@ std::set<int>::const_iterator SearchServer::end() const {
     return document_ids_.end();
 }
 
-tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
+// Однопоточная версия функции
+tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {    
+    return MatchDocument(execution::seq, raw_query, document_id);
+}
+
+// Однопоточная версия функции
+tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy policy, const string& raw_query, int document_id) const {
+    // Проверяем что данный документ существует по document_id
+    if (document_ids_.count(document_id) == 0) {
+        throw std::out_of_range("No document with this id");
+    }
+
     const Query query = ParseQuery(raw_query);
     // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
     // и статуса данного документа
@@ -178,37 +189,23 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& 
         }
     }
 
-    return { matched_words, documents_.at(document_id).status };// Succesfull
+    return { matched_words, documents_.at(document_id).status }; // Succesfull
 }
 
 // Многопоточная версия функции
 tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string& raw_query, int document_id) const {
     // Проверяем что данный документ существует по document_id
-    /*if () {
+    if (document_ids_.count(document_id) == 0) {
         throw std::out_of_range("No document with this id");
-    }*/
+    }
 
     const Query query = ParseQuery(raw_query);
     // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
     // и статуса данного документа
     vector<string> matched_words;
-    for (const string& word : query.plus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.push_back(word);
-        }
-    }
-    for (const string& word : query.minus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.clear();
-            break;
-        }
-    }
+
+    // Для каждого слова из Query.plus_words, находим соответствующее слово в word_to_document_freqs_
+    
 
     return { matched_words, documents_.at(document_id).status }; // Succesfull
 }

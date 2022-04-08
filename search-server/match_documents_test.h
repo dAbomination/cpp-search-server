@@ -1,12 +1,12 @@
-#pragma once
 #include "search_server.h"
-#include "log_duration.h"
 
+#include <execution>
 #include <iostream>
 #include <random>
 #include <string>
 #include <vector>
-#include <execution>
+
+#include "log_duration.h"
 
 using namespace std;
 
@@ -15,7 +15,7 @@ string GenerateWord(mt19937& generator, int max_length) {
     string word;
     word.reserve(length);
     for (int i = 0; i < length; ++i) {
-        word.push_back(uniform_int_distribution((short)'a', (short)'z')(generator));
+        word.push_back(uniform_int_distribution(short('a'), short('z'))(generator));
     }
     return word;
 }
@@ -31,12 +31,14 @@ vector<string> GenerateDictionary(mt19937& generator, int word_count, int max_le
     return words;
 }
 
-string GenerateQuery(mt19937& generator, const vector<string>& dictionary, int max_word_count) {
-    const int word_count = uniform_int_distribution(1, max_word_count)(generator);
+string GenerateQuery(mt19937& generator, const vector<string>& dictionary, int word_count, double minus_prob = 0) {
     string query;
     for (int i = 0; i < word_count; ++i) {
         if (!query.empty()) {
             query.push_back(' ');
+        }
+        if (uniform_real_distribution<>(0, 1)(generator) < minus_prob) {
+            query.push_back('-');
         }
         query += dictionary[uniform_int_distribution<int>(0, dictionary.size() - 1)(generator)];
     }
@@ -53,43 +55,7 @@ vector<string> GenerateQueries(mt19937& generator, const vector<string>& diction
 }
 
 template <typename ExecutionPolicy>
-void TestRemoveDocumentsBigSize(string_view mark, SearchServer search_server, ExecutionPolicy&& policy) {
-    LOG_DURATION(mark);
-    const int document_count = search_server.GetDocumentCount();
-    for (int id = 0; id < document_count; ++id) {
-        search_server.RemoveDocument(policy, id);
-    }
-    cout << search_server.GetDocumentCount() << endl;
-}
-
-#define TEST_REMOVING(mode) TestRemoveDocumentsBigSize(#mode, search_server, execution::mode)
-
-void TestRemovingDocumentsWithPolicy() {
-    mt19937 generator;
-    
-    const auto dictionary = GenerateDictionary(generator, 10'000, 25);
-    const auto documents = GenerateQueries(generator, dictionary, 10'000, 100);
-
-    {
-        SearchServer search_server(dictionary[0]);
-        for (size_t i = 0; i < documents.size(); ++i) {
-            search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
-        }
-
-        TEST_REMOVING(seq);
-    }
-    {
-        SearchServer search_server(dictionary[0]);
-        for (size_t i = 0; i < documents.size(); ++i) {
-            search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
-        }
-
-        TEST_REMOVING(par);
-    }
-}
-
-template <typename ExecutionPolicy>
-void TestMathcingDocumentsBigSize(string_view mark, SearchServer search_server, const string& query, ExecutionPolicy&& policy) {
+void Test(string_view mark, SearchServer search_server, const string& query, ExecutionPolicy&& policy) {
     LOG_DURATION(mark);
     const int document_count = search_server.GetDocumentCount();
     int word_count = 0;
@@ -100,7 +66,7 @@ void TestMathcingDocumentsBigSize(string_view mark, SearchServer search_server, 
     cout << word_count << endl;
 }
 
-#define TEST_MATCHING(policy) TestMathcingDocumentsBigSize(#policy, search_server, query, execution::policy)
+#define TEST(policy) Test(#policy, search_server, query, execution::policy)
 
 void TestMatchingDocumentsWithPolicy() {
     mt19937 generator;
@@ -115,6 +81,6 @@ void TestMatchingDocumentsWithPolicy() {
         search_server.AddDocument(i, documents[i], DocumentStatus::ACTUAL, { 1, 2, 3 });
     }
 
-    TEST_MATCHING(seq);
-    TEST_MATCHING(par);
+    //TEST(seq);
+    TEST(par);
 }
