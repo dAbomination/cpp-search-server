@@ -50,11 +50,6 @@ public:
     // ѕолучение слов и их частоты по Id документа
     const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
 
-    /* ѕозвол€ет получить id_document по его пор€дковому номеру.
-       ¬ случае, если пор€дковый номер документа выходит за пределы от [0; кол - во документов),
-       метод возвращает исключение*/
-    //int GetDocumentId(int index) const;
-
     int GetDocumentCount() const;
 
     std::set<int>::const_iterator begin() const;
@@ -87,6 +82,7 @@ private:
 
     std::vector<std::string> SplitIntoWordsNoStop(const std::string& text) const;
 
+    // –азбивает входной текст на плюс слова и минус слова(перед которыми есть знак "-")
     QueryWord ParseQueryWord(std::string text) const;
     Query ParseQuery(const std::string& text) const;
 
@@ -149,7 +145,7 @@ std::vector<Document> SearchServer::FindAllDocuments(const SearchServer::Query& 
             continue;
         }
         const double inverse_document_freq = ComputeWordInverseDocumentFreq(word);
-        for (const auto [document_id, term_freq] : SearchServer::word_to_document_freqs_.at(word)) {
+        for (const auto& [document_id, term_freq] : SearchServer::word_to_document_freqs_.at(word)) {
             const auto& document_data = SearchServer::documents_.at(document_id);
             if (document_predicate(document_id, document_data.status, document_data.rating)) {
                 document_to_relevance[document_id] += term_freq * inverse_document_freq;
