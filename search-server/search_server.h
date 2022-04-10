@@ -10,6 +10,7 @@
 #include <string>
 #include <deque>
 #include <execution>
+#include <string_view>
 
 #include "string_processing.h"
 #include "document.h"
@@ -68,8 +69,20 @@ private:
         std::set<std::string> minus_words;
     };
 
+    // Структура для хранения слов запроса
+    struct QueryView {
+        std::vector<std::string_view> plus_words;
+        std::vector<std::string_view> minus_words;
+    };
+
     struct QueryWord {
         std::string data;
+        bool is_minus;
+        bool is_stop;
+    };
+
+    struct QueryWordView {
+        std::string_view data;
         bool is_minus;
         bool is_stop;
     };
@@ -86,6 +99,9 @@ private:
     QueryWord ParseQueryWord(std::string text) const;
     Query ParseQuery(const std::string& text) const;
 
+    QueryView ParseQueryView(std::string_view text) const;
+    QueryWordView ParseQueryWordView(std::string_view text) const;
+
     static int ComputeAverageRating(const std::vector<int>& ratings);
 
     double ComputeWordInverseDocumentFreq(const std::string& word) const;
@@ -100,6 +116,7 @@ private:
     static bool NoSpecSymbols(const std::string& word);
 
     bool IsStopWord(const std::string& word) const;
+    bool IsStopWordView(std::string_view word) const;
 };
 //------------------Конец класса SearchServer-----------------------
 //------------------------------------------------------------------

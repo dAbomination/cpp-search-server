@@ -228,23 +228,23 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::par
         throw std::out_of_range("No document with this id");
     }
 
-    const Query query = ParseQuery(raw_query);
+    const QueryView query = ParseQueryView(raw_query);
     // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
     // и статуса данного документа
     vector<string> matched_words;
-    for (const string& word : query.plus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
+    for (const string_view word : query.plus_words) {
+        if (word_to_document_freqs_.count(string(word)) == 0) {
             continue;
         }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.push_back(word);
+        if (word_to_document_freqs_.at(string(word)).count(document_id)) {
+            matched_words.push_back(string(word));
         }
     }
-    for (const string& word : query.minus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
+    for (const string_view word : query.minus_words) {
+        if (word_to_document_freqs_.count(string(word)) == 0) {
             continue;
         }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
+        if (word_to_document_freqs_.at(string(word)).count(document_id)) {
             matched_words.clear();
             break;
         }
@@ -258,6 +258,10 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::par
 
 bool SearchServer::IsStopWord(const string& word) const {
     return stop_words_.count(word) > 0;
+}
+
+bool SearchServer::IsStopWordView(string_view word) const {
+    return stop_words_.count(string(word)) > 0;
 }
 
 vector<string> SearchServer::SplitIntoWordsNoStop(const string& text) const {
@@ -313,6 +317,41 @@ SearchServer::Query SearchServer::ParseQuery(const string& text) const {
             }
         }
     }
+    return query;
+}
+
+// Определяет является ли слово стоп словом(со знаком "-") или находится в вписке стоп слов
+SearchServer::QueryWordView SearchServer::ParseQueryWordView(string_view text) const {
+    bool is_minus = false;
+    // Word shouldn't be empty
+    if (text[0] == '-') {
+        is_minus = true;
+        text = text.substr(1);
+    }
+    return {
+        text,
+        is_minus,
+        IsStopWordView(text)
+    };
+}
+
+// Разбивает входной текст на плюс слова и минус слова(перед которыми есть знак "-")
+SearchServer::QueryView SearchServer::ParseQueryView(string_view text) const {
+    QueryView query;
+    
+    for (string_view word : SplitIntoWordsView(text)) {
+        QueryWordView query_word = ParseQueryWordView(word);
+
+        if (!query_word.is_stop && !query_word.is_minus) {
+            query.plus_words.push_back(word);
+        }
+        else {
+            if (query_word.is_minus) {
+                query.minus_words.push_back(word);
+            }
+        }
+    }
+
     return query;
 }
 
