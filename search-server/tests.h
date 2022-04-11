@@ -206,15 +206,15 @@ void TestMatchDocuments() {
         SearchServer server;
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
 
-        vector<string> result_matched_words;
+        vector<string_view> result_matched_words;
         DocumentStatus status_matched_document_status;
         //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
 
         tie(result_matched_words, status_matched_document_status) = server.MatchDocument(query, doc_id);
 
         //Поисковый запрос должен вернуть результат cat и the так как они присутствуют в указанном документе        
-        vector<string> expected_result = { "cat", "the" };
-        ASSERT_EQUAL((result_matched_words), expected_result);
+        vector<string_view> expected_result = { "cat", "the" };
+        ASSERT_EQUAL(result_matched_words, expected_result);
     }
     //Проверка исключения документа если там присутствует минус слово
     query = "cat dog -city outside the";
@@ -222,7 +222,7 @@ void TestMatchDocuments() {
         SearchServer server;
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
 
-        vector<string> result_matched_words;
+        vector<string_view> result_matched_words;
         DocumentStatus status_matched_document_status;
         //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
 
@@ -237,7 +237,7 @@ void TestMatchDocuments() {
         SearchServer server;
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
 
-        vector<string> result_matched_words;
+        vector<string_view> result_matched_words;
         DocumentStatus status_matched_document_status;
         //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument        
         tie(result_matched_words, status_matched_document_status) = server.MatchDocument(query, doc_id);
@@ -258,14 +258,14 @@ void TestMatchDocumentsInPar() {
         SearchServer server;
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
 
-        vector<string> result_matched_words;
+        vector<string_view> result_matched_words;
         DocumentStatus status_matched_document_status;
         //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
 
         tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, query, doc_id);
 
         //Поисковый запрос должен вернуть результат cat и the так как они присутствуют в указанном документе        
-        vector<string> expected_result = { "cat", "the" };
+        vector<string_view> expected_result = { "cat", "the" };
         ASSERT_EQUAL((result_matched_words), expected_result);
     }
     //Проверка исключения документа если там присутствует минус слово
@@ -274,7 +274,7 @@ void TestMatchDocumentsInPar() {
         SearchServer server;
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
 
-        vector<string> result_matched_words;
+        vector<string_view> result_matched_words;
         DocumentStatus status_matched_document_status;
         //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
 
@@ -289,13 +289,77 @@ void TestMatchDocumentsInPar() {
         SearchServer server;
         server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
 
-        vector<string> result_matched_words;
+        vector<string_view> result_matched_words;
         DocumentStatus status_matched_document_status;
         //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument        
         tie(result_matched_words, status_matched_document_status) = server.MatchDocument(query, doc_id);
 
         //Поисковый запрос должен вернуть пустую строку так как в запросе присутвует минус слово city        
         ASSERT(result_matched_words.empty());
+    }
+}
+
+// Проверяет работу исключений при вводе неподходящих симовло в запросе функции ЬфесрВщсгьуте
+void TestMatchDocumentsThrowExecptions() {
+    string query = "cat dog out\nside the";
+    const int doc_id = 42;
+    //Проверка того что функция MatchDocument выбрасывает исклюсение при наличие спецсимволов в запросе
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, "cat in the city"s, DocumentStatus::ACTUAL, { 0 });
+
+        vector<string_view> result_matched_words;
+        DocumentStatus status_matched_document_status;
+        //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
+        
+        try {
+            tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, query, doc_id);
+        }
+        catch (const exception& e) {
+            ASSERT_EQUAL(e.what(), "contains invalid characters"s);
+        }
+    }    
+
+    //Проверка того что функция MatchDocument выбрасывает исклюсение при поиске несуществующего документа
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, "cat in the city"s, DocumentStatus::ACTUAL, { 0 });
+
+        vector<string_view> result_matched_words;
+        DocumentStatus status_matched_document_status;
+        //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
+
+        try {
+            tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, query, doc_id + 1);
+        }
+        catch (const exception& e) {
+            ASSERT_EQUAL(e.what(), "no document with this id"s);
+        }
+    }
+
+    //Проверка того что функция MatchDocument выбрасывает исклюсение при наличие в запросе двух минусов подряд передсловом
+    // или отдельного минуса
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, "cat in the city"s, DocumentStatus::ACTUAL, { 0 });
+
+        vector<string_view> result_matched_words;
+        DocumentStatus status_matched_document_status;
+        //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
+
+        try {
+            tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, "cat in - the city"s, doc_id);
+        }
+        catch (const exception& e) {
+            ASSERT_EQUAL(e.what(), "lonely minus"s);
+        }
+
+        try {
+            tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, "cat in --the city"s, doc_id);
+        }
+        catch (const exception& e) {
+            ASSERT_EQUAL(e.what(), "too many minuses"s);
+        }
     }
 }
 
@@ -640,8 +704,11 @@ void TestSearchServer() {
     RUN_TEST(TestSplitIntoWordsWithDifferentErrors);
     RUN_TEST(TestAddingDocumentsStopWordsExcludingStopWords);
     RUN_TEST(TestExludeDocumentsWithMinusWordsFromResults);
+
     RUN_TEST(TestMatchDocuments);
     RUN_TEST(TestMatchDocumentsInPar);
+    RUN_TEST(TestMatchDocumentsThrowExecptions);
+
     RUN_TEST(TestSortingByRelevance);
     RUN_TEST(TestRatingCalculation);
     RUN_TEST(TestFilterWithPredicate);

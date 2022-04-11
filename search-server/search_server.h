@@ -43,9 +43,9 @@ public:
     std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentStatus status) const;
     std::vector<Document> FindTopDocuments(const std::string& raw_query) const;       
         
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(std::execution::sequenced_policy policy, const std::string& raw_query, int document_id) const;
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(std::execution::parallel_policy policy, const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::sequenced_policy policy, const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::parallel_policy policy, const std::string& raw_query, int document_id) const;
 
 
     // ѕолучение слов и их частоты по Id документа
@@ -111,9 +111,9 @@ private:
 
     // ѕроверка валидности отдельного слова на:
     // отсутствие более чем одного минуса перед словами
-    static bool NoWrongMinuses(const std::string& word);
+    static bool NoWrongMinuses(const std::string_view word);
     // наличие недопустимых символов (с кодами от 0 до 31)
-    static bool NoSpecSymbols(const std::string& word);
+    static bool NoSpecSymbols(const std::string_view word);
 
     bool IsStopWord(const std::string& word) const;
     bool IsStopWordView(std::string_view word) const;

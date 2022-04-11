@@ -158,45 +158,19 @@ std::set<int>::const_iterator SearchServer::end() const {
 }
 
 // ќднопоточна€ верси€ функции
-tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
-    if (document_ids_.count(document_id) == 0) {
-        throw std::out_of_range("No document with this id");
-    }
-
-    const Query query = ParseQuery(raw_query);
-    //  ортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
-    // и статуса данного документа
-    vector<string> matched_words;
-    for (const string& word : query.plus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.push_back(word);
-        }
-    }
-    for (const string& word : query.minus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.clear();
-            break;
-        }
-    }
-
-    return { matched_words, documents_.at(document_id).status }; // Succesfull
+    return MatchDocument(execution::seq, raw_query, document_id);
 }
 
 // ќднопоточна€ верси€ функции
-tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy policy, const string& raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy policy, const string& raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
     if (document_ids_.count(document_id) == 0) {
-        throw std::out_of_range("No document with this id");
+        throw std::out_of_range("no document with this id");
     }
 
-    const Query query = ParseQuery(raw_query);
+    const QueryView query = ParseQueryView(raw_query);
     const DocumentStatus status = documents_.at(document_id).status;
 
     //  ортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id и статуса данного документа
@@ -204,11 +178,11 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::seq
     // ѕровер€ем вначале если если есть совпадение с минус словами и если есть то возвращаем пустой вектор,
     // так как искать совпадение по плюс словам в таком случае не надо
     if (any_of(
-        policy,
+        execution::seq,
         query.minus_words.begin(),
         query.minus_words.end(),
-        [&, document_id](const string& minus_word) {
-            auto it = word_to_document_freqs_.find(minus_word);
+        [&, document_id](const string_view minus_word) {
+            auto it = word_to_document_freqs_.find(string(minus_word));
             return it != word_to_document_freqs_.end() && it->second.count(document_id);
         }
     )) {
@@ -216,15 +190,15 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::seq
     }
 
     // ≈сли совпадений по минус ловам не было, необходимо
-    vector<string> matched_words(query.plus_words.size());
+    vector<string_view> matched_words(query.plus_words.size());
 
     auto words_end = copy_if(
-        policy,
+        execution::seq,
         query.plus_words.begin(),
         query.plus_words.end(),
         matched_words.begin(),
-        [&, document_id](const string_view minus_word) {
-            auto it = word_to_document_freqs_.find(string(minus_word));
+        [&, document_id](const string_view plus_word) {
+            auto it = word_to_document_freqs_.find(string(plus_word));
             return it != word_to_document_freqs_.end() && it->second.count(document_id);
         }
     );
@@ -233,14 +207,21 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::seq
     words_end = unique(matched_words.begin(), words_end);
     matched_words.erase(words_end, matched_words.end());
 
-    return { matched_words, status }; // Succesfull    
+    vector<string_view> matched_words_view;
+
+    for (auto& word : matched_words) {
+        auto it = word_to_document_freqs_.find(string(word));
+        matched_words_view.push_back(it->first);
+    }
+
+    return { matched_words_view, status }; // Succesfull   
 }
 
 // ћногопоточна€ верси€ функции
-tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string& raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string& raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
     if (document_ids_.count(document_id) == 0) {
-        throw std::out_of_range("No document with this id");
+        throw std::out_of_range("no document with this id");
     }
 
     const QueryView query = ParseQueryView(raw_query);
@@ -251,7 +232,7 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::par
     // ѕровер€ем вначале если если есть совпадение с минус словами и если есть то возвращаем пустой вектор,
     // так как искать совпадение по плюс словам в таком случае не надо
     if (any_of(
-        policy,
+        execution::par,
         query.minus_words.begin(),
         query.minus_words.end(),
         [&, document_id](const string_view minus_word) {
@@ -263,10 +244,10 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::par
     }
        
     // ≈сли совпадений по минус ловам не было, необходимо
-    vector<string> matched_words(query.plus_words.size());
+    vector<string_view> matched_words(query.plus_words.size());
 
     auto words_end = copy_if(
-        policy,
+        execution::par,
         query.plus_words.begin(),
         query.plus_words.end(),
         matched_words.begin(),
@@ -276,11 +257,18 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::par
         }
     );
     
-    sort(matched_words.begin(), words_end);
+    sort(execution::par, matched_words.begin(), words_end);
     words_end = unique(matched_words.begin(), words_end);
     matched_words.erase(words_end, matched_words.end());
 
-    return { matched_words, status }; // Succesfull
+    vector<string_view> matched_words_view;
+
+    for (auto& word : matched_words) {
+        auto it = word_to_document_freqs_.find(string(word));
+        matched_words_view.push_back(it->first);
+    }
+
+    return { matched_words_view, status }; // Succesfull   
 }
 
 //---------------------------- ѕриватные методы ----------------------------
@@ -370,6 +358,9 @@ SearchServer::QueryView SearchServer::ParseQueryView(string_view text) const {
     
     for (string_view word : SplitIntoWordsView(text)) {
         QueryWordView query_word = ParseQueryWordView(word);
+        
+        NoSpecSymbols(word);
+        NoWrongMinuses(word);
 
         if (!query_word.is_stop && !query_word.is_minus) {
             query.plus_words.push_back(word);
@@ -390,11 +381,11 @@ double SearchServer::ComputeWordInverseDocumentFreq(const string& word) const {
 }
 
 // ѕроверка отдельного слова на наличие спецсимволов
-bool SearchServer::NoSpecSymbols(const string& word) {    
+bool SearchServer::NoSpecSymbols(const string_view word) {    
     if (!none_of(word.begin(), word.end(), [](char c) {
         return c >= '\0' && c < ' ';
         })) {
-        throw invalid_argument("contains invalid characters");
+        throw std::invalid_argument("contains invalid characters");
     }    
     return true;
 }
@@ -402,7 +393,7 @@ bool SearchServer::NoSpecSymbols(const string& word) {
 // ѕроверка отдельного слова на :
 // - то что слово не €вл€етс€ "одиноким" минусом
 // - то что перед словом не идут подр€д несколько минусов
-bool SearchServer::NoWrongMinuses(const string& word) {
+bool SearchServer::NoWrongMinuses(const string_view word) {
     if (word == "-") throw invalid_argument("lonely minus");
     if ((word.size() >= 2) && (word[0] == '-') && (word[1] == '-')) throw invalid_argument("too many minuses");
     return true;
@@ -417,12 +408,12 @@ void PrintDocument(const Document& document) {
         << "rating = "s << document.rating << " }"s << endl;
 }
 
-void PrintMatchDocumentResult(int document_id, const vector<string>& words, DocumentStatus status) {
+void PrintMatchDocumentResult(int document_id, const vector<string_view>& words, DocumentStatus status) {
     cout << "{ "s
         << "document_id = "s << document_id << ", "s
         << "status = "s << static_cast<int>(status) << ", "s
         << "words ="s;
-    for (const string& word : words) {
+    for (const string_view word : words) {
         cout << ' ' << word;
     }
     cout << "}"s << endl;
