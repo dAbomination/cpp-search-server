@@ -4,16 +4,21 @@ using namespace std;
 
 //---------------------------- ѕубличные методы ----------------------------
 
-void SearchServer::SetStopWords(const string& text) {
-    for (const string& stop_word : SplitIntoWords(text)) {
+void SearchServer::SetStopWords(const string_view text) {
+    for (const string_view stop_word : SplitIntoWordsView(text)) {
         if (NoSpecSymbols(stop_word)) {
-            stop_words_.insert(stop_word);
+            stop_words_.insert(string(stop_word));
         }
     }
 }
 
 // онструктор от аргумента string - строка со стоп словами
-SearchServer::SearchServer(string stop_words) {
+SearchServer::SearchServer(string stop_words) 
+    : SearchServer(string_view(stop_words)) {    
+}
+
+// онструктор от аргумента string_view - строка со стоп словами
+SearchServer::SearchServer(string_view stop_words) {
     SetStopWords(stop_words);
 }
  
@@ -164,7 +169,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const str
 }
 
 // ќднопоточна€ верси€ функции
-tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy policy, const string& raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy policy, const string_view raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
     if (document_ids_.count(document_id) == 0) {
         throw std::out_of_range("no document with this id");
@@ -178,7 +183,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
     // ѕровер€ем вначале если если есть совпадение с минус словами и если есть то возвращаем пустой вектор,
     // так как искать совпадение по плюс словам в таком случае не надо
     if (any_of(
-        execution::seq,
+        //execution::seq,
         query.minus_words.begin(),
         query.minus_words.end(),
         [&, document_id](const string_view minus_word) {
@@ -193,7 +198,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
     vector<string_view> matched_words(query.plus_words.size());
 
     auto words_end = copy_if(
-        execution::seq,
+        //execution::seq,
         query.plus_words.begin(),
         query.plus_words.end(),
         matched_words.begin(),
@@ -218,7 +223,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
 }
 
 // ћногопоточна€ верси€ функции
-tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string& raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string_view raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
     if (document_ids_.count(document_id) == 0) {
         throw std::out_of_range("no document with this id");

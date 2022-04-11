@@ -21,13 +21,14 @@ const int MAX_RESULT_DOCUMENT_COUNT = 5;
 //------------------Начало класса SearchServer----------------------
 class SearchServer {
 public:    
-    void SetStopWords(const std::string& text);
+    void SetStopWords(const std::string_view text);
 
     // Шаблонный конкструктор для контейнеров set и вектор   
     template<typename Container>
     explicit SearchServer(Container input_stop_words);
     //Конструктор от аргумента string - строка со стоп словами
     explicit SearchServer(std::string stop_words = "");
+    explicit SearchServer(std::string_view stop_words);
 
     // Adding new document to search server
     void AddDocument(int document_id, const std::string& document, DocumentStatus status, const std::vector<int>& ratings);
@@ -44,8 +45,8 @@ public:
     std::vector<Document> FindTopDocuments(const std::string& raw_query) const;       
         
     std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(const std::string& raw_query, int document_id) const;
-    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::sequenced_policy policy, const std::string& raw_query, int document_id) const;
-    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::parallel_policy policy, const std::string& raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::sequenced_policy policy, const std::string_view raw_query, int document_id) const;
+    std::tuple<std::vector<std::string_view>, DocumentStatus> MatchDocument(std::execution::parallel_policy policy, const std::string_view raw_query, int document_id) const;
 
 
     // Получение слов и их частоты по Id документа
@@ -117,6 +118,8 @@ private:
 
     bool IsStopWord(const std::string& word) const;
     bool IsStopWordView(std::string_view word) const;
+
+    bool IsValidWord(std::string_view word) const;
 };
 //------------------Конец класса SearchServer-----------------------
 //------------------------------------------------------------------
