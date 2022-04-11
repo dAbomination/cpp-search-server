@@ -197,28 +197,43 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::seq
     }
 
     const Query query = ParseQuery(raw_query);
-    // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
-    // и статуса данного документа
-    vector<string> matched_words;
-    for (const string& word : query.plus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
+    const DocumentStatus status = documents_.at(document_id).status;
+
+    // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id и статуса данного документа
+
+    // Проверяем вначале если если есть совпадение с минус словами и если есть то возвращаем пустой вектор,
+    // так как искать совпадение по плюс словам в таком случае не надо
+    if (any_of(
+        policy,
+        query.minus_words.begin(),
+        query.minus_words.end(),
+        [&, document_id](const string& minus_word) {
+            auto it = word_to_document_freqs_.find(minus_word);
+            return it != word_to_document_freqs_.end() && it->second.count(document_id);
         }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.push_back(word);
-        }
-    }
-    for (const string& word : query.minus_words) {
-        if (word_to_document_freqs_.count(word) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(word).count(document_id)) {
-            matched_words.clear();
-            break;
-        }
+    )) {
+        return { {}, status };
     }
 
-    return { matched_words, documents_.at(document_id).status }; // Succesfull
+    // Если совпадений по минус ловам не было, необходимо
+    vector<string> matched_words(query.plus_words.size());
+
+    auto words_end = copy_if(
+        policy,
+        query.plus_words.begin(),
+        query.plus_words.end(),
+        matched_words.begin(),
+        [&, document_id](const string_view minus_word) {
+            auto it = word_to_document_freqs_.find(string(minus_word));
+            return it != word_to_document_freqs_.end() && it->second.count(document_id);
+        }
+    );
+
+    sort(matched_words.begin(), words_end);
+    words_end = unique(matched_words.begin(), words_end);
+    matched_words.erase(words_end, matched_words.end());
+
+    return { matched_words, status }; // Succesfull    
 }
 
 // Многопоточная версия функции
@@ -229,29 +244,43 @@ tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(execution::par
     }
 
     const QueryView query = ParseQueryView(raw_query);
-    // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id
-    // и статуса данного документа
-    vector<string> matched_words;
-    for (const string_view word : query.plus_words) {
-        if (word_to_document_freqs_.count(string(word)) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(string(word)).count(document_id)) {
-            matched_words.push_back(string(word));
-        }
-    }
-    for (const string_view word : query.minus_words) {
-        if (word_to_document_freqs_.count(string(word)) == 0) {
-            continue;
-        }
-        if (word_to_document_freqs_.at(string(word)).count(document_id)) {
-            matched_words.clear();
-            break;
-        }
-    }
-    
+    const DocumentStatus status = documents_.at(document_id).status;
 
-    return { matched_words, documents_.at(document_id).status }; // Succesfull
+    // Кортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id и статуса данного документа
+    
+    // Проверяем вначале если если есть совпадение с минус словами и если есть то возвращаем пустой вектор,
+    // так как искать совпадение по плюс словам в таком случае не надо
+    if (any_of(
+        policy,
+        query.minus_words.begin(),
+        query.minus_words.end(),
+        [&, document_id](const string_view minus_word) {
+            auto it = word_to_document_freqs_.find(string(minus_word));
+            return it != word_to_document_freqs_.end() && it->second.count(document_id);
+        }
+    )) {
+        return { {}, status };
+    }
+       
+    // Если совпадений по минус ловам не было, необходимо
+    vector<string> matched_words(query.plus_words.size());
+
+    auto words_end = copy_if(
+        policy,
+        query.plus_words.begin(),
+        query.plus_words.end(),
+        matched_words.begin(),
+        [&, document_id](const string_view plus_word) {
+            auto it = word_to_document_freqs_.find(string(plus_word));
+            return it != word_to_document_freqs_.end() && it->second.count(document_id);
+        }
+    );
+    
+    sort(matched_words.begin(), words_end);
+    words_end = unique(matched_words.begin(), words_end);
+    matched_words.erase(words_end, matched_words.end());
+
+    return { matched_words, status }; // Succesfull
 }
 
 //---------------------------- Приватные методы ----------------------------
@@ -326,7 +355,7 @@ SearchServer::QueryWordView SearchServer::ParseQueryWordView(string_view text) c
     // Word shouldn't be empty
     if (text[0] == '-') {
         is_minus = true;
-        text = text.substr(1);
+        text.remove_prefix(1);
     }
     return {
         text,
@@ -347,7 +376,7 @@ SearchServer::QueryView SearchServer::ParseQueryView(string_view text) const {
         }
         else {
             if (query_word.is_minus) {
-                query.minus_words.push_back(word);
+                query.minus_words.push_back(query_word.data);
             }
         }
     }

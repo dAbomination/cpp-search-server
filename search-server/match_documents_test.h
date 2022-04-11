@@ -1,3 +1,4 @@
+#pragma once
 #include "search_server.h"
 
 #include <execution>

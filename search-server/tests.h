@@ -247,6 +247,58 @@ void TestMatchDocuments() {
     }
 }
 
+// Проверяет работу многопоточной версии функции матчинга документов
+void TestMatchDocumentsInPar() {
+    const int doc_id = 42;
+    const string content = "cat in the city"s;
+    const vector<int> ratings = { 1, 2, 3 };
+    string query = "cat dog outside the";
+    //Проверка того что функция MatchDocument находит совпадающие слова
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+
+        vector<string> result_matched_words;
+        DocumentStatus status_matched_document_status;
+        //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
+
+        tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, query, doc_id);
+
+        //Поисковый запрос должен вернуть результат cat и the так как они присутствуют в указанном документе        
+        vector<string> expected_result = { "cat", "the" };
+        ASSERT_EQUAL((result_matched_words), expected_result);
+    }
+    //Проверка исключения документа если там присутствует минус слово
+    query = "cat dog -city outside the";
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+
+        vector<string> result_matched_words;
+        DocumentStatus status_matched_document_status;
+        //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument
+
+        tie(result_matched_words, status_matched_document_status) = server.MatchDocument(execution::par, query, doc_id);
+
+        //Поисковый запрос должен вернуть пустую строку так как в запросе присутвует минус слово city
+        ASSERT(result_matched_words.empty());
+    }
+    //Если совпадающих слов нет должен возвращаться пустой вектор
+    query = "dog inside box";
+    {
+        SearchServer server;
+        server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+
+        vector<string> result_matched_words;
+        DocumentStatus status_matched_document_status;
+        //Распаковываем кортеж, который изменяется по ссылке в результате выполнения функции MatchDocument        
+        tie(result_matched_words, status_matched_document_status) = server.MatchDocument(query, doc_id);
+
+        //Поисковый запрос должен вернуть пустую строку так как в запросе присутвует минус слово city        
+        ASSERT(result_matched_words.empty());
+    }
+}
+
 // Сортировка найденных документов по релевантности.Возвращаемые при поиске документов результаты должны быть
 // отсортированы в порядке убывания релевантности.
 void TestSortingByRelevance() {
@@ -589,6 +641,7 @@ void TestSearchServer() {
     RUN_TEST(TestAddingDocumentsStopWordsExcludingStopWords);
     RUN_TEST(TestExludeDocumentsWithMinusWordsFromResults);
     RUN_TEST(TestMatchDocuments);
+    RUN_TEST(TestMatchDocumentsInPar);
     RUN_TEST(TestSortingByRelevance);
     RUN_TEST(TestRatingCalculation);
     RUN_TEST(TestFilterWithPredicate);
