@@ -12,7 +12,7 @@ vector<vector<Document>> ProcessQueries(
         queries.end(),
         result.begin(),
         [&search_server](const string& query) {
-            return search_server.FindTopDocuments(query);
+            return move(search_server.FindTopDocuments(execution::par, query));
         }
     );
 

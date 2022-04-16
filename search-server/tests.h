@@ -583,7 +583,7 @@ void TestRelevanceCalculating() {
     vector<Document> result = server.FindTopDocuments(query, DocumentStatus::ACTUAL);
 
     //сравним полученные значения с расчтёными с погрешностью в 0.001
-    for (int i = 0; i < result.size(); ++i) {
+    for (int i = 0; i < result.size(); ++i) {        
         ASSERT(abs(result[i].relevance - expected_relevance[i]) <= 0.001);
     }
 }
@@ -722,6 +722,6 @@ void TestSearchServer() {
 
     //RUN_TEST(TestRemovingDocumentsWithPolicy);
     //RUN_TEST(TestMatchingDocumentsWithPolicy);
-    RUN_TEST(TestFindingDocuments);
+    //RUN_TEST(TestFindingDocuments);
 }
 //-----------Окончание модульных тестов поисковой системы------------

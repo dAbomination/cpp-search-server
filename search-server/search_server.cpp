@@ -28,13 +28,13 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     if ((documents_.count(document_id)) || (document_id < 0)) {
         throw invalid_argument("document_id already exist or below zero"); // error: this document_id already exist or below zero
     }
-    vector<string> words = SplitIntoWordsNoStop(document);
+    vector<string_view> words = SplitIntoWordsNoStop(document);
     const double inv_word_count = 1.0 / words.size();
 
     map<string, double> word_freqs_in_doc;
-    for (const string& word : words) {
-        word_to_document_freqs_[word][document_id] += inv_word_count;        
-        word_freqs_in_doc[word] += inv_word_count;
+    for (const string_view word : words) {
+        word_to_document_freqs_[string(word)][document_id] += inv_word_count;        
+        word_freqs_in_doc[string(word)] += inv_word_count;
     }
 
     documents_.emplace(document_id,
@@ -128,7 +128,31 @@ vector<Document> SearchServer::FindTopDocuments(const string_view raw_query) con
 
 // Find documents with certain status
 vector<Document> SearchServer::FindTopDocuments(execution::parallel_policy, const string_view raw_query, DocumentStatus status) const {
+    
     return FindTopDocuments(
+        execution::par,
+        raw_query,
+        [status](int document_id, DocumentStatus document_status, int rating) {
+            return document_status == status;
+        }
+    );
+}
+
+// Find documents with status = ACTUAL
+vector<Document> SearchServer::FindTopDocuments(execution::parallel_policy, const string_view raw_query) const {
+    return FindTopDocuments(
+        execution::par,
+        raw_query,
+        [](int document_id, DocumentStatus status, int rating) {
+            return status == DocumentStatus::ACTUAL;
+        }
+    );
+}
+
+// Find documents with certain status
+vector<Document> SearchServer::FindTopDocuments(execution::sequenced_policy, const string_view raw_query, DocumentStatus status) const {
+    return FindTopDocuments(
+        execution::seq,
         raw_query,
         [status](int document_id, DocumentStatus document_status, int rating) {
             return document_status == status;
@@ -139,6 +163,7 @@ vector<Document> SearchServer::FindTopDocuments(execution::parallel_policy, cons
 // Find documents with status = ACTUAL
 vector<Document> SearchServer::FindTopDocuments(execution::sequenced_policy, const string_view raw_query) const {
     return FindTopDocuments(
+        execution::seq,
         raw_query,
         [](int document_id, DocumentStatus status, int rating) {
             return status == DocumentStatus::ACTUAL;
@@ -183,7 +208,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
         throw std::out_of_range("no document with this id");
     }
 
-    const QueryView query = ParseQueryView(raw_query);
+    const Query query = ParseQuery(raw_query);
     const DocumentStatus status = documents_.at(document_id).status;
 
     //  ортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id и статуса данного документа
@@ -202,11 +227,10 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
         return { {}, status };
     }
 
-    // ≈сли совпадений по минус ловам не было, необходимо
+    // ≈сли совпадений по минус ловам не было, необходимо пройти по плюс словам и добавить совпадающие значени€
     vector<string_view> matched_words(query.plus_words.size());
 
     auto words_end = copy_if(
-        //execution::seq,
         query.plus_words.begin(),
         query.plus_words.end(),
         matched_words.begin(),
@@ -237,7 +261,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
         throw std::out_of_range("no document with this id");
     }
 
-    const QueryView query = ParseQueryView(raw_query);
+    const Query query = ParseQuery(raw_query);
     const DocumentStatus status = documents_.at(document_id).status;
 
     //  ортеж состоит из vector<string> matched_words, совпадающие слова в документе с docuemnt_id и статуса данного документа
@@ -286,17 +310,17 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
 
 //---------------------------- ѕриватные методы ----------------------------
 
-bool SearchServer::IsStopWord(const string& word) const {
-    return stop_words_.count(word) > 0;
+bool SearchServer::IsStopWord(const string_view word) const {
+    return stop_words_.count(string(word)) > 0;
 }
 
 bool SearchServer::IsStopWordView(string_view word) const {
     return stop_words_.count(string(word)) > 0;
 }
 
-vector<string> SearchServer::SplitIntoWordsNoStop(const string& text) const {
-    vector<string> result;
-    for (const string& word : SplitIntoWords(text)) {
+vector<string_view> SearchServer::SplitIntoWordsNoStop(const string_view text) const {
+    vector<string_view> result;
+    for (const string_view word : SplitIntoWordsView(text)) {
         if (NoSpecSymbols(word)) {
             if (!IsStopWord(word)) {
                 result.push_back(word);
@@ -318,7 +342,7 @@ int SearchServer::ComputeAverageRating(const vector<int>& ratings) {
 }
 
 // ќпредел€ет €вл€етс€ ли слово стоп словом(со знаком "-") или находитс€ в вписке стоп слов
-SearchServer::QueryWordView SearchServer::ParseQueryWordView(string_view text) const {
+SearchServer::QueryWord SearchServer::ParseQueryWord(string_view text) const {
     bool is_minus = false;
     // Word shouldn't be empty
     if (text[0] == '-') {
@@ -328,16 +352,17 @@ SearchServer::QueryWordView SearchServer::ParseQueryWordView(string_view text) c
     return {
         text,
         is_minus,
-        IsStopWordView(text)
+        IsStopWord(text)
     };
 }
 
 // –азбивает входной текст на плюс слова и минус слова(перед которыми есть знак "-")
-SearchServer::QueryView SearchServer::ParseQueryView(string_view text) const {
-    QueryView query;
+SearchServer::Query SearchServer::ParseQuery(string_view text) const {
+    Query query;
     
+
     for (string_view word : SplitIntoWordsView(text)) {
-        QueryWordView query_word = ParseQueryWordView(word);
+        QueryWord query_word = ParseQueryWord(word);
         
         NoSpecSymbols(word);
         NoWrongMinuses(word);
@@ -351,6 +376,10 @@ SearchServer::QueryView SearchServer::ParseQueryView(string_view text) const {
             }
         }
     }
+
+    sort(query.plus_words.begin(), query.plus_words.end());
+    auto plus_words_end = unique(query.plus_words.begin(), query.plus_words.end());
+    query.plus_words.resize(distance(query.plus_words.begin(), plus_words_end));
 
     return query;
 }

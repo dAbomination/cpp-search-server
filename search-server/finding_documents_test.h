@@ -60,7 +60,7 @@ void Test(string_view mark, const SearchServer& search_server, const vector<stri
     LOG_DURATION(mark);
     double total_relevance = 0;
     for (const string_view query : queries) {
-        for (const auto& document : search_server.FindTopDocuments(policy, query)) {
+        for (const auto& document : search_server.FindTopDocuments(policy, string(query))) {
             total_relevance += document.relevance;
         }
     }
@@ -83,5 +83,5 @@ void TestFindingDocuments() {
     const auto queries = GenerateQueries(generator, dictionary, 100, 70);
 
     TEST(seq);
-    //TEST(par);
+    TEST(par);
 }
