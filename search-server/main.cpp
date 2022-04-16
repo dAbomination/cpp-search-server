@@ -4,7 +4,6 @@
 #include "remove_duplicates.h"
 #include "process_queries.h"
 
-
 #include <random>
 
 #define TESTS
@@ -25,7 +24,7 @@ int main() {
     
     //----------------Произвольные тесты-----------------------------     
     {
-        
+        //FindingDocumentsTest();
     }
 
     return 0;

@@ -49,15 +49,15 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
 
 // ќднопоточна€ верси€ удалени€ документа
 void SearchServer::RemoveDocument(int document_id) {
-    RemoveDocument(execution::seq, document_id);
+    RemoveDocument(std::execution::seq, document_id);
 }
 
 // ќднопоточна€ верси€ удалени€ документа
-void SearchServer::RemoveDocument(std::execution::sequenced_policy policy, int document_id) {
+void SearchServer::RemoveDocument(std::execution::sequenced_policy, int document_id) {
     // «на€ количество слов в документе удал€ем из следующих контейнеров данные об этом документе
     // word_to_document_freqs_
     for_each(
-        policy,
+        execution::seq,
         documents_[document_id].word_freqs_.begin(),
         documents_[document_id].word_freqs_.end(),
         [this, document_id](const pair<string, double>& word) { // first - word, second - word's freq
@@ -73,53 +73,41 @@ void SearchServer::RemoveDocument(std::execution::sequenced_policy policy, int d
 }
 
 // ћногопоточна€ верси€ удалени€ документа
-void SearchServer::RemoveDocument(std::execution::parallel_policy policy, int document_id) {    
+void SearchServer::RemoveDocument(std::execution::parallel_policy, int document_id) {    
 
-// «на€ количество слов в документе удал€ем из следующих контейнеров данные об этом документе
-// word_to_document_freqs_       
-map<string, double>& words_in_doc = documents_.at(document_id).word_freqs_;
-vector<const string*> words_to_erase(words_in_doc.size());
+    // «на€ количество слов в документе удал€ем из следующих контейнеров данные об этом документе
+    // word_to_document_freqs_       
+    map<string, double>& words_in_doc = documents_.at(document_id).word_freqs_;
+    vector<const string*> words_to_erase(words_in_doc.size());
 
-transform(
-    policy,
-    words_in_doc.begin(),
-    words_in_doc.end(),
-    words_to_erase.begin(),
-    [](const auto& word) {
-        return &word.first;
-    }
-);
+    transform(
+        execution::par,
+        words_in_doc.begin(),
+        words_in_doc.end(),
+        words_to_erase.begin(),
+        [](const auto& word) {
+            return &word.first;
+        }
+    );
 
-for_each(
-    policy,
-    words_to_erase.begin(),
-    words_to_erase.end(),
-    [&, document_id](const auto& word) {
-        word_to_document_freqs_[*word].erase(document_id);
-    }
-);
+    for_each(
+        execution::par,
+        words_to_erase.begin(),
+        words_to_erase.end(),
+        [&, document_id](const auto& word) {
+            word_to_document_freqs_[*word].erase(document_id);
+        }
+    );
 
-// Ќедостаточно скорости выполнени€
-//vector<pair<string, double>> words_to_remove(documents_[document_id].word_freqs_.begin(), documents_[document_id].word_freqs_.end());
+    // document_ids_
+    document_ids_.erase(document_id);
 
-//for_each(
-//    policy,
-//    words_to_remove.begin(),
-//    words_to_remove.end(),
-//    [&, document_id](const pair<string, double>& word) { // first - word, second - word's freq
-//        word_to_document_freqs_[word.first].erase(document_id);
-//    }
-//);
-
-// document_ids_
-document_ids_.erase(document_id);
-
-// documents_
-documents_.erase(document_id);
+    // documents_
+    documents_.erase(document_id);
 }
 
 // Find documents with certain status
-vector<Document> SearchServer::FindTopDocuments(const string& raw_query, DocumentStatus status) const {
+vector<Document> SearchServer::FindTopDocuments(const string_view raw_query, DocumentStatus status) const {
     return FindTopDocuments(
         raw_query,
         [status](int document_id, DocumentStatus document_status, int rating) {
@@ -129,7 +117,27 @@ vector<Document> SearchServer::FindTopDocuments(const string& raw_query, Documen
 }
 
 // Find documents with status = ACTUAL
-vector<Document> SearchServer::FindTopDocuments(const string& raw_query) const {
+vector<Document> SearchServer::FindTopDocuments(const string_view raw_query) const {
+    return FindTopDocuments(
+        raw_query,
+        [](int document_id, DocumentStatus status, int rating) {
+            return status == DocumentStatus::ACTUAL;
+        }
+    );
+}
+
+// Find documents with certain status
+vector<Document> SearchServer::FindTopDocuments(execution::parallel_policy, const string_view raw_query, DocumentStatus status) const {
+    return FindTopDocuments(
+        raw_query,
+        [status](int document_id, DocumentStatus document_status, int rating) {
+            return document_status == status;
+        }
+    );
+}
+
+// Find documents with status = ACTUAL
+vector<Document> SearchServer::FindTopDocuments(execution::sequenced_policy, const string_view raw_query) const {
     return FindTopDocuments(
         raw_query,
         [](int document_id, DocumentStatus status, int rating) {
@@ -169,7 +177,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(const str
 }
 
 // ќднопоточна€ верси€ функции
-tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy policy, const string_view raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::sequenced_policy, const string_view raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
     if (document_ids_.count(document_id) == 0) {
         throw std::out_of_range("no document with this id");
@@ -183,7 +191,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
     // ѕровер€ем вначале если если есть совпадение с минус словами и если есть то возвращаем пустой вектор,
     // так как искать совпадение по плюс словам в таком случае не надо
     if (any_of(
-        //execution::seq,
+        execution::seq,
         query.minus_words.begin(),
         query.minus_words.end(),
         [&, document_id](const string_view minus_word) {
@@ -223,7 +231,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
 }
 
 // ћногопоточна€ верси€ функции
-tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy policy, const string_view raw_query, int document_id) const {
+tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution::parallel_policy, const string_view raw_query, int document_id) const {
     // ѕровер€ем что данный документ существует по document_id
     if (document_ids_.count(document_id) == 0) {
         throw std::out_of_range("no document with this id");
@@ -307,39 +315,6 @@ int SearchServer::ComputeAverageRating(const vector<int>& ratings) {
         rating_sum += rating;
     }
     return rating_sum / static_cast<int>(ratings.size());
-}
-
-SearchServer::QueryWord SearchServer::ParseQueryWord(string text) const {
-    bool is_minus = false;
-    // Word shouldn't be empty
-    if (text[0] == '-') {
-        is_minus = true;
-        text = text.substr(1);
-    }
-    return {
-        text,
-        is_minus,
-        IsStopWord(text)
-    };
-}
-
-// –азбивает входной текст на плюс слова и минус слова(перед которыми есть знак "-")
-SearchServer::Query SearchServer::ParseQuery(const string& text) const {
-    Query query;
-    for (const string& word : SplitIntoWords(text)) {
-        const QueryWord query_word = ParseQueryWord(word);
-        if (NoSpecSymbols(word) && NoWrongMinuses(word)) {// ѕроверка все ли слова подход€щие
-            if (!query_word.is_stop) {
-                if (query_word.is_minus) {
-                    query.minus_words.insert(query_word.data);
-                }
-                else {
-                    query.plus_words.insert(query_word.data);
-                }
-            }
-        }
-    }
-    return query;
 }
 
 // ќпредел€ет €вл€етс€ ли слово стоп словом(со знаком "-") или находитс€ в вписке стоп слов
