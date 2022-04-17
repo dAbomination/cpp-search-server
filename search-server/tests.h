@@ -722,6 +722,6 @@ void TestSearchServer() {
 
     //RUN_TEST(TestRemovingDocumentsWithPolicy);
     //RUN_TEST(TestMatchingDocumentsWithPolicy);
-    //RUN_TEST(TestFindingDocuments);
+    RUN_TEST(TestFindingDocuments);
 }
 //-----------ќкончание модульных тестов поисковой системы------------

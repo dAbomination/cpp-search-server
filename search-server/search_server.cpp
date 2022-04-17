@@ -29,12 +29,16 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
         throw invalid_argument("document_id already exist or below zero"); // error: this document_id already exist or below zero
     }
     vector<string_view> words = SplitIntoWordsNoStop(document);
+
     const double inv_word_count = 1.0 / words.size();
 
     map<string, double> word_freqs_in_doc;
     for (const string_view word : words) {
-        word_to_document_freqs_[string(word)][document_id] += inv_word_count;        
-        word_freqs_in_doc[string(word)] += inv_word_count;
+        //Проверяем слово на наличие спецсимволов
+        if (NoSpecSymbols(word)) {
+            word_to_document_freqs_[string(word)][document_id] += inv_word_count;
+            word_freqs_in_doc[string(word)] += inv_word_count;
+        }
     }
 
     documents_.emplace(document_id,
@@ -119,51 +123,6 @@ vector<Document> SearchServer::FindTopDocuments(const string_view raw_query, Doc
 // Find documents with status = ACTUAL
 vector<Document> SearchServer::FindTopDocuments(const string_view raw_query) const {
     return FindTopDocuments(
-        raw_query,
-        [](int document_id, DocumentStatus status, int rating) {
-            return status == DocumentStatus::ACTUAL;
-        }
-    );
-}
-
-// Find documents with certain status
-vector<Document> SearchServer::FindTopDocuments(execution::parallel_policy, const string_view raw_query, DocumentStatus status) const {
-    
-    return FindTopDocuments(
-        execution::par,
-        raw_query,
-        [status](int document_id, DocumentStatus document_status, int rating) {
-            return document_status == status;
-        }
-    );
-}
-
-// Find documents with status = ACTUAL
-vector<Document> SearchServer::FindTopDocuments(execution::parallel_policy, const string_view raw_query) const {
-    return FindTopDocuments(
-        execution::par,
-        raw_query,
-        [](int document_id, DocumentStatus status, int rating) {
-            return status == DocumentStatus::ACTUAL;
-        }
-    );
-}
-
-// Find documents with certain status
-vector<Document> SearchServer::FindTopDocuments(execution::sequenced_policy, const string_view raw_query, DocumentStatus status) const {
-    return FindTopDocuments(
-        execution::seq,
-        raw_query,
-        [status](int document_id, DocumentStatus document_status, int rating) {
-            return document_status == status;
-        }
-    );
-}
-
-// Find documents with status = ACTUAL
-vector<Document> SearchServer::FindTopDocuments(execution::sequenced_policy, const string_view raw_query) const {
-    return FindTopDocuments(
-        execution::seq,
         raw_query,
         [](int document_id, DocumentStatus status, int rating) {
             return status == DocumentStatus::ACTUAL;
@@ -280,7 +239,7 @@ tuple<vector<string_view>, DocumentStatus> SearchServer::MatchDocument(execution
         return { {}, status };
     }
        
-    // Если совпадений по минус ловам не было, необходимо
+    // Если совпадений по минус ловам не было, необходимо пройти по плюс словам и добавить совпадающие значения
     vector<string_view> matched_words(query.plus_words.size());
 
     auto words_end = copy_if(
@@ -314,18 +273,12 @@ bool SearchServer::IsStopWord(const string_view word) const {
     return stop_words_.count(string(word)) > 0;
 }
 
-bool SearchServer::IsStopWordView(string_view word) const {
-    return stop_words_.count(string(word)) > 0;
-}
-
 vector<string_view> SearchServer::SplitIntoWordsNoStop(const string_view text) const {
     vector<string_view> result;
-    for (const string_view word : SplitIntoWordsView(text)) {
-        if (NoSpecSymbols(word)) {
-            if (!IsStopWord(word)) {
-                result.push_back(word);
-            }
-        }
+    for (const string_view word : SplitIntoWordsView(text)) {        
+        if (!IsStopWord(word)) {
+            result.push_back(word);
+        }        
     }
     return result;
 }
@@ -358,21 +311,19 @@ SearchServer::QueryWord SearchServer::ParseQueryWord(string_view text) const {
 
 // Разбивает входной текст на плюс слова и минус слова(перед которыми есть знак "-")
 SearchServer::Query SearchServer::ParseQuery(string_view text) const {
-    Query query;
-    
+    Query query;    
 
     for (string_view word : SplitIntoWordsView(text)) {
         QueryWord query_word = ParseQueryWord(word);
-        
-        NoSpecSymbols(word);
-        NoWrongMinuses(word);
-
-        if (!query_word.is_stop && !query_word.is_minus) {
-            query.plus_words.push_back(word);
-        }
-        else {
-            if (query_word.is_minus) {
-                query.minus_words.push_back(query_word.data);
+        // Проверяем слово на валидность
+        if (NoSpecSymbols(word) && NoWrongMinuses(word)) {
+            if (!query_word.is_stop && !query_word.is_minus) {
+                query.plus_words.push_back(word);
+            }
+            else {
+                if (query_word.is_minus) {
+                    query.minus_words.push_back(query_word.data);
+                }
             }
         }
     }
