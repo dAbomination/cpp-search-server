@@ -110,12 +110,6 @@ void RunTestImpl(TestFunc func, const string& func_name) {
 
 //--------------------------------------------------------------
 //--------- Начало модульных тестов поисковой системы ----------
-// Тест функции SplitIntoWords при множественных пробелах
-void TestSplitIntoWordsWithDifferentErrors() {
-    const vector<string> expected_result = { "first"s, "second"s, "third"s };
-    vector<string> result = SplitIntoWords("   first       second            third    "s);
-    ASSERT_EQUAL(result, expected_result);
-}
 
 // Тест проверяет: работоспособность конструкторов с различными параметрами,
 // что поисковая система исключает стоп-слова при добавлении документов,
@@ -702,7 +696,6 @@ void TestParallelSearchQueriesJoined() {
 
 // Функция TestSearchServer является точкой входа для запуска тестов
 void TestSearchServer() {
-    RUN_TEST(TestSplitIntoWordsWithDifferentErrors);
     RUN_TEST(TestAddingDocumentsStopWordsExcludingStopWords);
     RUN_TEST(TestExludeDocumentsWithMinusWordsFromResults);
 

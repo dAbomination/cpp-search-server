@@ -13,7 +13,7 @@ class ConcurrentMap {
 private:
     struct Bucket {
         std::mutex mutex;
-        std::map<Key, Value> map;
+        std::map<Key, Value> map;        
     };
 
 public:
@@ -22,10 +22,12 @@ public:
     struct Access {
         std::lock_guard<std::mutex> guard;
         Value& ref_to_value;
+        std::map<Key, Value>& ref_to_bucket;
 
-        Access(const Key& key, Bucket& bucket)
+        Access(const Key& key, Bucket& bucket )
             : guard(bucket.mutex)
-            , ref_to_value(bucket.map[key]) {
+            , ref_to_value(bucket.map[key])
+            , ref_to_bucket(bucket.map) {
         }
     };
 
