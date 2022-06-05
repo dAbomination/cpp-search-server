@@ -22,7 +22,7 @@ int main() {
     cout << "Search server testing finished"s << endl << endl;
     #endif // DEBUG    
     
-    //----------------Произвольные тесты-----------------------------     
+    //----------------Џроизвольные тесты-----------------------------     
     {
         //FindingDocumentsTest();
         

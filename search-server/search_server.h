@@ -62,7 +62,6 @@ public:
     MatchedWords MatchDocument(std::execution::sequenced_policy, const std::string_view raw_query, int document_id) const;
     MatchedWords MatchDocument(std::execution::parallel_policy, const std::string_view raw_query, int document_id) const;
 
-
     // ѕолучение слов и их частоты по Id документа
     const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
 
